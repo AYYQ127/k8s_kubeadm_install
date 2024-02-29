@@ -1,0 +1,479 @@
+- name: 第一步初始化系统
+  hosts: k8s
+  gather_facts: no
+  vars_files: ../files/vars.yaml
+  tasks: 
+    - name: 1:创建安装缓存目录
+      file:
+        path: /root/k8s_install
+        state: directory
+
+    - name: 2:检查init_system.lock文件是否存在
+      stat:
+        path: /root/k8s_install/init_system.lock
+      register: init_file_exists
+
+    - name: 3:开始进行初始化操作
+      block:
+        - name: 3.1:安装时间同步chrony
+          apt:
+            name: chrony
+            state: present
+          when: inventory_hostname in groups['manage_node']
+
+        - name: 3.2:配置时间同步chrony
+          lineinfile:
+            path: /etc/chrony/chrony.conf
+            line: allow
+            create: yes
+          when: inventory_hostname in groups['manage_node']
+
+        - name: 3.3:设置节点时间同步
+          lineinfile:
+            path: /etc/systemd/timesyncd.conf
+            regexp: ^#NTP=
+            line: 'NTP={{NTP}}'
+            backup: yes  
+          when: inventory_hostname in groups['except_manage_node']
+
+        - name: 3.4:24小时制
+          copy:
+            content: |
+              LANG=en_US.UTF-8
+              LC_TIME=en_DK.UTF-8
+            dest: /etc/default/locale
+        - name: 3.5:set timezone
+          timezone:
+            name: Asia/Shanghai
+        - name: 3.6:安装中文包，支持显示中文
+          apt:
+            name: language-pack-zh-hans
+            state: present 
+
+        - name: 3.7:安装docker.io
+          apt:
+            name: docker.io
+            state: present
+        - name: 3.8:配置/etc/docker/daemon.json
+          copy:
+            content: |
+              { 
+                "data-root": "/data2/docker", 
+                "exec-opts": ["native.cgroupdriver=systemd"], 
+                "registry-mirrors": [
+                  "https://docker.mirrors.ustc.edu.cn",
+                  "http://hub-mirror.c.163.com"
+                ],
+                "insecure-registries": ["{{ harbor_domain }}"],
+                "max-concurrent-downloads": 10,
+                "live-restore": true,
+                "log-driver": "json-file",
+                "log-level": "warn",
+                "log-opts": {
+                  "max-size": "50m",
+                  "max-file": "1"
+                  },
+                "storage-driver": "overlay2"
+              }
+            dest: /etc/docker/daemon.json
+
+        - name: 3.9:重启docker
+          service:
+            name: docker
+            state: restarted
+ 
+        - name: 3.10.安装 ipset ipvsadm
+          apt:
+            pkg:
+            - ipset
+            - ipvsadm
+          
+        - name: 3.11:k8s系统调优
+          copy:
+            content: |
+              #允许IPv6转发请求通过iptables进行处理(如果禁用防火墙或不是iptables,则该配置无效)
+              net.bridge.bridge-nf-call-ip6tables = 1
+              #允许IPv4转发请求通过iptables进行处理(如果禁用防火墙或不是iptables,则该配置无效)
+              net.bridge.bridge-nf-call-iptables = 1
+              #启用IPv4数据包的转发功能
+              net.ipv4.ip_forward = 1
+              #禁用发送 ICMP 重定向消息
+              #net.ipv4.conf.all.send_redirects = 0
+              #net.ipv4.conf.default.send_redirects = 0
+              #提高TCP连接跟踪的最大数量
+              # net.netfilter.nf_conntrack_max = 1000000
+              #提高连接追踪表的超时时间
+              #net.netfilter.nf_conntrack_tcp_timeout_established = 86400
+              #提高监听队列大小
+              #net.core.somaxconn = 1024
+              #防止 SYN 攻击
+              #net.ipv4.tcp_syncookies = 1
+              #net.ipv4.tcp_max_syn_backlog = 2048
+              #net.ipv4.tcp_synack_retries = 2
+              #提高文件描述符限制
+              fs.file-max = 65536
+              #设置虚拟内存交换(swap)的使用策略为0,减少对磁盘的频繁读写
+              vm.swappiness = 0
+            dest: /etc/sysctl.d/k8s.conf
+    
+        - name: 3.12:加载iptables和ipvs内核模块
+          copy:
+            content: |
+              # /etc/modules-load.d/kubernetes.conf
+              # Linux 网桥支持
+              br_netfilter
+              # IPVS 加载均衡器
+              ip_vs
+              ip_vs_rr
+              ip_vs_wrr
+              ip_vs_sh
+              # IPv4 连接跟踪
+              nf_conntrack_ipv4
+              # IP 表规则
+              ip_tables
+            dest: /etc/modules-load.d/kubernetes.conf
+            mode: '0755'
+
+        - name: 3.13:在文件中查找 swap 行
+          shell: grep -E 'swap' /etc/fstab || true
+          register: swap_lines
+          failed_when: false
+
+        - name: 3.14:注释掉 swap 行
+          lineinfile:
+            path: /etc/fstab
+            regexp: '{{ item }}'
+            line: '# {{ item }}'
+            backup: yes
+          with_items: "{{ swap_lines.stdout_lines }}"
+          when: swap_lines.stdout_lines | length > 0
+      always:
+        - name: 3.15关闭 swap 分区
+          command: swapoff -a
+      when: not init_file_exists.stat.exists
+
+    - name: 4.重启标记
+      block:
+      - name: 4.1:创建初始化lock文件
+        file: 
+          path: /root/k8s_install/init_system.lock
+          state: touch
+      - name: 4.2:重启所有节点
+        reboot:
+          reboot_timeout: 5
+      when: not init_file_exists.stat.exists  
+  
+
+- name: 第二步 安装 kubeadmin
+  hosts: k8s
+  gather_facts: no
+  vars_files: ../files/vars.yaml
+  tasks:
+    - name: 1:检查install_kubeadmin.lock文件是否存在
+      stat:
+        path: /root/k8s_install/install_kubeadmin.lock
+      register: install_file_exists
+
+    - name: 2.containerd设置相关
+      block:
+        - name: 2.1:创建containerd目录
+          file:
+            path: /etc/containerd
+            state: directory
+            mode: "0755"
+
+        - name: 2.2:生成containerd配置
+          shell: containerd config default > /etc/containerd/config.toml
+
+        - name: 2.3:修改配置文件中使用的沙箱镜像版本,修改成阿里源的{{sandbox_image}}
+          lineinfile:
+            path: /etc/containerd/config.toml
+            regexp: sandbox_image
+            line: '    sandbox_image = "registry.aliyuncs.com/google_containers/{{sandbox_image}}"'
+            backup: yes
+        - name: 2.4:设置容器运行时(containerd + CRI)在创建容器时使用 Systemd Cgroups 驱动
+          lineinfile:
+            path: /etc/containerd/config.toml
+            regexp: SystemdCgroup
+            line: '            SystemdCgroup = true'
+            backup: yes
+        
+        - name: 2.5:解决crictl ps 报错
+          copy:
+            content: |
+              runtime-endpoint: unix:///run/containerd/containerd.sock
+              image-endpoint: unix:///run/containerd/containerd.sock
+              timeout: 10
+              debug: false
+              pull-image-on-create: false
+            dest: /etc/crictl.yaml       
+        - name: 2.6:重启 containerd
+          service:
+            name: containerd
+            state: restarted
+      when: not install_file_exists.stat.exists
+
+    - name: 3.安装Kubernetes
+      block:
+        - name: 3.1:添加k8s官方安装源的GPG 密钥
+          copy: 
+            src: ../files/k8s_pkgs/kubernetes-apt-keyring.gpg
+            dest: /etc/apt/kubernetes-apt-keyring.gpg
+
+        - name: 3.2:添加Kubernetes官方软件源到系统的 apt 软件源列表
+          copy: 
+            src: ../files/k8s_pkgs/source.list
+            dest: /etc/apt/sources.list.d/kubernetes.list
+
+        - name: 3.3:apt update 
+          apt:
+            update_cache: yes
+
+        - name: 3.4:安装Kubernetes apt仓库所需要的包
+          apt:
+            pkg:
+            - gnupg
+            - gnupg2
+            - curl
+            - software-properties-common
+
+        - name: 3.5:安装 kubelet kubeadm kubectl {{kube_3tools_version}}版本
+          apt:
+            pkg:
+            - kubelet={{kube_3tools_version}}
+            - kubeadm={{kube_3tools_version}}
+            - kubectl={{kube_3tools_version}}
+
+        - name: 3.6:锁定软件包版本以防止其被自动更新
+          shell: apt-mark hold kubelet kubeadm kubectl       
+
+        - name: 3.7:指定kubelet使用systemd作为容器运行时的cgroup驱动程序
+          copy:
+            content: |
+              KUBELET_EXTRA_ARGS="--cgroup-driver=systemd"
+            dest: /etc/default/kubelet
+        
+        - name: 3.8:重启kubelet服务
+          service:
+            name: kubelet
+            state: restarted
+
+        - name: 3.9:添加kubectl tab键补全
+          lineinfile:
+            path: /root/.bashrc
+            line: source <(kubectl completion bash)
+            create: yes
+          delegate_to: "{{ item }}"
+          loop: "{{ groups['manage_node'] }}"
+
+        - name: 3.10:添加kubectl tab键报错
+          lineinfile:
+            path: /root/.bashrc
+            line: source /usr/share/bash-completion/bash_completion
+            create: yes
+          delegate_to: "{{ item }}"
+          loop: "{{ groups['manage_node'] }}"
+        - name: 3.11:创建安装lock文件
+          file: 
+            path: /root/k8s_install/install_kubeadmin.lock
+            state: touch        
+      when: not install_file_exists.stat.exists
+
+- name: 第三步 初始化集群,添加工作节点
+  hosts: localhost
+  gather_facts: no
+  vars_files: ../files/vars.yaml
+  tags: after_install
+  tasks:
+    - name: 1:检查after_install.lock文件是否存在
+      stat:
+        path: /root/k8s_install/after_install.lock
+      register: after_install_file_exists
+      
+    - name: 1.执行kubeadm init
+      block:
+        - name: 1.1:将初始化的命令写入一个脚本，用脚本执行
+          copy:
+            content: |
+              kubeadm init --control-plane-endpoint={{control_plane_endpoint}} --image-repository=registry.aliyuncs.com/google_containers --kubernetes-version={{kubernetes_version}} --pod-network-cidr={{pod_network_cidr}} --apiserver-advertise-address={{apiserver_advertise_address}} --cri-socket unix://var/run/containerd/containerd.sock
+              touch /root/k8s_install/init.lock
+            dest: /root/k8s_install/kubeadm_init.sh
+            mode: '0755'
+
+        - name: 1.2:执行脚本
+          shell: /root/k8s_install/kubeadm_init.sh
+          args:
+            creates: /root/k8s_install/init.lock
+
+        - name: 1.3:创建.kube目录等
+          shell: mkdir -p $HOME/.kube && cp -f /etc/kubernetes/admin.conf $HOME/.kube/config && chown $(id -u):$(id -g) $HOME/.kube/config && touch /root/k8s_install/kube.lock
+          args:
+            creates: /root/k8s_install/kube.lock
+        - name: 1.4:如果异常退出
+          debug:
+            msg: |
+              需要在manage_node节点执行kubeadm reset 并删除rm /root/k8s_install/{init.lock,kube.lock}
+      when: not after_install_file_exists.stat.exists
+
+    - name: 2.添加节点到集群
+      block:
+        - name: 2.1:重新生成join命令
+          shell: kubeadm token create --print-join-command 
+          register: join_command
+
+        - name: 2.2:生成证书密钥
+          shell: kubeadm init phase upload-certs --upload-certs 2>&1 | tail -n 1
+          register: certificate_key
+
+        - name: 2.3:将nodes节点join命令写入一个脚本,用脚本执行
+          copy:
+            content: |
+              {{ item }}
+            dest: /root/k8s_install/nodes_join_command.sh
+            mode: '0755'
+          with_items: "{{ join_command.stdout_lines }}" 
+
+        - name: 2.4:将other_masters节点join命令写入一个脚本,用脚本执行
+          copy:
+            content: |
+              {{ item }} --control-plane --certificate-key {{ certificate_key.stdout }}
+            dest: /root/k8s_install/control_plane_join_command.sh
+            mode: '0755'
+          with_items: "{{ join_command.stdout_lines }}"
+          when: groups['other_masters']|length > 0
+ 
+        - name: 2.5:复制nodes节点join脚本到nodes节点
+          copy:
+            src: /root/k8s_install/nodes_join_command.sh
+            dest: /root/k8s_install/nodes_join_command.sh
+            mode: '0755'
+          delegate_to: "{{ item }}"
+          loop: "{{ groups['nodes'] }}"
+
+        - name: 2.6:复制other_masters节点join脚本到other_masters节点,如果有的话
+          copy:
+            src: /root/k8s_install/control_plane_join_command.sh
+            dest: /root/k8s_install/control_plane_join_command.sh
+            mode: '0755'
+          delegate_to: "{{ item }}"
+          loop: "{{ groups['other_masters'] }}"
+          when: groups['other_masters']|length > 0
+        
+        - name: 2.7:nodes节点执行join_command
+          shell: /root/k8s_install/nodes_join_command.sh && touch /root/k8s_install/join.lock
+          args:
+            creates: /root/k8s_install/join.lock
+          delegate_to: "{{ item }}"
+          loop: "{{ groups['nodes'] }}"
+
+        - name: 2.8:other_masters节点执行 join_command
+          shell: /root/k8s_install/control_plane_join_command.sh && touch /root/k8s_install/join.lock
+          args:
+            creates: /root/k8s_install/join.lock
+          delegate_to: "{{ item }}"
+          loop: "{{ groups['other_masters'] }}"
+          when: groups['other_masters']|length > 0
+
+        - name: 2.9:为nodes节点添加角色
+          shell: kubectl label nodes "{{ item }}" node-role.kubernetes.io/node=node
+          args:
+            creates: /root/k8s_install/label.lock
+          loop: "{{ groups['nodes'] }}"
+
+        - name: 2.10:创建label.lock文件
+          file: 
+            path: /root/k8s_install/label.lock
+            state: touch
+
+        - name: 2.11:如果异常退出
+          debug:
+            msg: |
+              需要在所有nodes和other_masters分组节点执行kubeadm reset 并删除rm /root/k8s_install/{join.lock,label.lock}
+
+      when: not after_install_file_exists.stat.exists
+
+    - name: 3.安装calico相关
+      block:
+        - name: 3.1:calico官网地址
+          debug:
+            msg: |
+              https://docs.tigera.io/calico/latest/about
+
+        - name: 3.2:快速部署参考地址
+          debug:
+            msg: |
+              https://docs.tigera.io/calico/latest/getting-started/kubernetes/quickstart
+
+        - name: 3.3:快速部署yaml
+          shell: kubectl create -f ../files/calico/tigera-operator_{{calico_version}}.yaml
+
+        - name: 3.4:calico默认用的192.168.0.0作为pod的网络范围,初始化时我们使用的是{{pod_network}}所以需要修改
+          lineinfile:
+            path: ../files/calico/custom-resources_{{calico_version}}.yaml
+            regexp: cidr
+            line: '      cidr: {{pod_network}}'
+            backup: yes
+
+        - name: 3.5:创建必要的自定义资源
+          shell: kubectl create -f ../files/calico/custom-resources_{{calico_version}}.yaml
+      when: not after_install_file_exists.stat.exists
+
+
+
+    - name: 4.安装ingress
+      block:
+        - name: 4.1:ingress github地址,查看版本对应关系
+          debug:
+            msg: |
+              https://github.com/kubernetes/ingress-nginx/blob/main/README.md#readme
+
+        - name: 4.2:快速部署参考地址
+          debug:
+            msg: |
+              https://kubernetes.github.io/ingress-nginx/deploy/#quick-start
+
+        - name: 4.3:安装ingress使用如下命令
+          shell: kubectl create -f ../files/ingress/deploy_{{ingress_version}}.yaml
+        
+        - name: 4.4:创建安装lock文件
+          file: 
+            path: /root/k8s_install/after_install.lock
+            state: touch
+
+      when: not after_install_file_exists.stat.exists
+
+    - name: 5.如果成功
+      debug:
+        msg: |
+          你不会看到任何错误,可以执行../files下的test-ingress.yaml验证网络:kubectl apply -f files/test-ingress.yaml, kubectl get pod,svc,ing
+
+- name: 第四步[选装] 安装metrics
+  import_playbook: ./metrics_server_install.yaml
+  tags:
+    - metrics
+    - never
+
+- name: 第五步[选装] 安装cert_manager
+  import_playbook: ./cert_manager_install.yaml
+  tags:
+    - cert_manager
+    - never
+
+
+- name: 第六步[选装] dashboard
+  import_playbook: ./dashboard_install.yaml
+  tags:
+    - dashboard
+    - never
+
+- name: 第七步[选装] prometheus
+  import_playbook: ./prometheus_install.yaml
+  tags:
+    - prometheus
+    - never
+
+- name: 第八步[选装] harbor
+  import_playbook: ./harbor_install.yaml
+  tags:
+    - harbor
+    - never

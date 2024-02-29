@@ -1,0 +1,20 @@
+- name: 创建cert-manager资源对象
+  hosts: localhost
+  gather_facts: no
+  vars_files: ../files/vars.yaml
+  tasks:
+    - name: 检查cert-manager.lock文件是否存在
+      stat:
+        path: /root/k8s_install/cert_manager.lock
+      register: cert_manager_exists
+
+    - name: 创建cert_manager资源对象
+      shell: kubectl apply -f ../files/cert-manager/cert-manager_{{cert_manager_version}}.yaml
+
+    - name: 创建安装lock文件
+      file: 
+        path: /root/k8s_install/cert_manager.lock
+        state: touch      
+
+      when: not cert_manager_exists.stat.exists
+

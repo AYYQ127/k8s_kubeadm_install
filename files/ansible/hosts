@@ -1,0 +1,46 @@
+# 修改hosts节点名,分组不能修改,只加/etc/hosts中对应主机名
+
+###                                                           
+#
+# 如果不想使用22端口ssh连接,可以添加变量ansible_ssh_port=port_num
+# 例如：
+# [manage_node]
+# master1 ansible_ssh_port=2222
+#
+#
+###
+
+# 执行安装的节点,第一台master
+[manage_node]
+master1 
+
+# 其他主节点在此添加,不要再加manage_node
+[other_masters]
+master2 
+
+# 工作节点在此添加
+[nodes]
+node1 
+node2 
+
+# harbor服务器
+[harbor_server]
+harbor
+
+# ****************以下内容不要修改*****************
+
+# 除了操作节点的所有节点
+[except_manage_node:children]
+other_masters
+nodes
+
+# 所有主节点(请勿修改)
+[masters:children]
+manage_node
+other_masters
+
+# 所有节点分组(请勿修改)
+[k8s:children]
+manage_node
+other_masters
+nodes 

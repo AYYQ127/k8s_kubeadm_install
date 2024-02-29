@@ -1,0 +1,39 @@
+- name: 创建prometheus资源对象
+  hosts: localhost
+  gather_facts: no
+  vars_files: ../files/vars.yaml
+  tasks:
+    - name: 检查prometheus.lock文件是否存在
+      stat:
+        path: /root/k8s_install/prometheus.lock
+      register: prometheus_exists
+
+    - name: 创建prometheus资源对象操作
+      block:
+        - name: 创建prometheus namespace and CRDs
+          shell: kubectl apply --server-side -f ../files/prometheus/kube-prometheus-{{kube_prometheus_version}}/manifests/setup
+
+        - name: 等待prometheus namespace and CRDs
+          shell: kubectl wait --for condition=Established --all CustomResourceDefinition --namespace=monitoring
+          
+        - name: 创建prometheus资源对象
+          shell: kubectl apply -f ../files/prometheus/kube-prometheus-{{kube_prometheus_version}}/manifests/
+
+        - name: 修改grafana-ingress的host
+          lineinfile:
+            path: ../files/prometheus/grafana-ingress.yaml  
+            regexp: "  - host"
+            line: "  - host: {{grafana_host}}"
+
+        - name: 创建grafana-ingress
+          shell: kubectl apply -f ../files/prometheus/grafana-ingress.yaml        
+
+        - name: 创建安装lock文件
+          file: 
+            path: /root/k8s_install/prometheus.lock
+            state: touch  
+
+      when: not prometheus_exists.stat.exists
+
+
+

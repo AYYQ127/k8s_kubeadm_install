@@ -1,0 +1,67 @@
+- name: 创建dashboard资源对象
+  hosts: localhost
+  gather_facts: no
+  vars_files: ../files/vars.yaml
+  tasks:
+    - name: 检查dashboard.lock文件是否存在
+      stat:
+        path: /root/k8s_install/dashboard.lock
+      register: dashboard_exists
+
+    - name: 创建dashboard资源对象操作
+      block:
+        - name: 请确认cert_manager已经安装
+          debug:
+            msg: |
+              "请确认cert_manager已经安装,如果没有,请终止playboook,执行ansible-playbook playbooks/main.yaml  -t cert_manager"
+          when: kubernetes_dashboard_version == 'v3.0.0-alpha0'
+
+        - name: 请确认cert_manager已经安装,暂停15秒
+          pause:
+            seconds: 15 
+          when: kubernetes_dashboard_version == 'v3.0.0-alpha0'
+
+        - name: 判断版本是不是v3.0.0-alpha0,是的话替换host访问域名
+          lineinfile:
+            path: ../files/dashboard/kubernetes-dashboard_{{kubernetes_dashboard_version}}.yaml
+            regexp: "    - host:"
+            line: "    - host: {{dashboard_host}}"
+          when: kubernetes_dashboard_version == 'v3.0.0-alpha0'
+          failed_when: false
+
+        - name: 判断版本是不是v2.7.0,是的话替换nodePort端口
+          lineinfile:
+            path: ../files/dashboard/kubernetes-dashboard_{{kubernetes_dashboard_version}}.yaml
+            regexp: "      nodePort:"
+            line: "      nodePort: {{dashboard_nodePoart}}"
+          when: kubernetes_dashboard_version == 'v2.7.0'
+          failed_when: false
+
+        - name: 创建dashboard资源对象
+          shell: kubectl apply -f ../files/dashboard/kubernetes-dashboard_{{kubernetes_dashboard_version}}.yaml
+
+        - name: 授权
+          shell: kubectl create serviceaccount kube-dashboard-admin-sa -n kube-system; kubectl create clusterrolebinding kube-dashboard-admin-sa --clusterrole=cluster-admin --serviceaccount=kube-system:kube-dashboard-admin-sa 
+          
+        - name: 生成token
+          shell: kubectl create token kube-dashboard-admin-sa -n kube-system --duration=87600h
+          register: dashboard_token
+
+        - name: 将token写入一个文件保存起来
+          copy:
+            content: |
+              {{ item }}
+            dest: /root/k8s_install/dashboard_token
+          with_items: "{{ dashboard_token.stdout_lines }}"           
+
+        - name: dashboard的token请查看/root/k8s_install/dashboard_token
+          debug:
+            msg: |
+              cat /root/k8s_install/dashboard_token
+
+        - name: 创建安装lock文件
+          file: 
+            path: /root/k8s_install/dashboard.lock
+            state: touch  
+
+      when: not dashboard_exists.stat.exists
