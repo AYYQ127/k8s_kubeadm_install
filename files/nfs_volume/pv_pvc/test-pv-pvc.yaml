@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-pvc-example
+spec:
+  selector:
+    matchLabels:
+      app: nginx-pvc
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: nginx-pvc
+    spec:
+      volumes:
+      - name: index-dir                 # 给资源起名在volumeMount中引用
+        persistentVolumeClaim:          # 指定使用PVC持久卷
+          claimName: nfs-pvc            # PVC资源名称
+      containers:
+      - name: nginx
+        image: myharbor.com/test/nginx:latest
+        ports:
+        - protocol: TCP
+          containerPort: 80
+        volumeMounts:
+        - name: index-dir                         # volumes定义的资源名称
+          mountPath: /usr/share/nginx/html/        # mount持久卷的路径
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-pvc-service
+spec:
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+  selector:
+    app: nginx-pvc
+  type: ClusterIP
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pvc-nginx-ing
+  #annotations:
+  #  kubernetes.io/ingress.class: nginx
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: "test-pvc.bar.com"
+    http:
+      paths:
+      - pathType: Prefix
+        path: "/"
+        backend:
+          service:
+            #name: nginx-web-svc
+            name: nginx-pvc-service
+            port:
+              number: 80

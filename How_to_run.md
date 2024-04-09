@@ -119,7 +119,7 @@ passwd: password updated successfully
 复制密钥到各个节点，包括自己 
 循环四次依次输入yes和密码
 ```bash
-root@master1:~# for i in {master1,master2,node1,node2}; do  ssh-copy-id root@$i; done
+root@master1:~# for i in {master1,node1,node2,harbor}; do  ssh-copy-id root@$i; done
 
 /usr/bin/ssh-copy-id: INFO: Source of key(s) to be installed: "/root/.ssh/id_rsa.pub"
 The authenticity of host 'master1 (192.168.152.200)' can't be established.
@@ -798,4 +798,195 @@ Commercial support is available at
 </html>
 
 ```
+
+### master节点参与调度
+```bash
+# 查看污点
+root@master1:~# kubectl describe node master2 |grep Taints
+Taints:             node-role.kubernetes.io/control-plane:NoSchedule
+
+# 删除污点
+root@master1:~# kubectl taint nodes master2 node-role.kubernetes.io/control-plane:NoSchedule-
+node/master2 untainted
+root@master1:~# kubectl describe node master2 |grep Taints
+Taints:             <none>
+
+# 添加master2为node角色
+root@master1:~# kubectl label nodes master2 node-role.kubernetes.io/node=
+root@master1:~# kubectl label nodes master2 node-role.kubernetes.io/control-plane-
+node/master2 unlabeled
+root@master1:~#
+root@master1:~#
+root@master1:~# kubectl get nodes
+NAME      STATUS   ROLES           AGE   VERSION
+master1   Ready    control-plane   38d   v1.28.4
+master2   Ready    node            38d   v1.28.4
+node1     Ready    node            38d   v1.28.4
+node2     Ready    node            38d   v1.28.4
+
+```
+
+
+### Volume(持久卷)
+1. 静态Provisioning
+```bash
+sudo parted /dev/sdb
+(parted) p
+(parted) mklabel
+New disk label type? gpt
+(parted) mkpart
+Partition name?  []? vrayst01
+File system type?  [ext2]? xfs
+Start? 0%
+End? 100%
+ (parted) q
+Information: You may need to update /etc/fstab.
++
+mkfs.xfs -f /dev/sdb1
+blkid /dev/sdb1
++
+vi /etc/fstab
+/dev/sdb1               /data8                  xfs     defaults        0 0
+UUID="42c3f78d-61f3-48bf-b5b8-36eaf149d2b8"  /hdd_data                 xfs     defaults        0 0
+
+
+
+
+#nfs-server install
+root@harbor:~# apt install nfs-kernel-server nfs-common -y 
+root@harbor:~# cat /etc/exports
+# /etc/exports: the access control list for filesystems which may be exported
+#               to NFS clients.  See exports(5).
+#
+# Example for NFSv2 and NFSv3:
+# /srv/homes       hostname1(rw,sync,no_subtree_check) hostname2(ro,sync,no_subtree_check)
+#
+# Example for NFSv4:
+# /srv/nfs4        gss/krb5i(rw,sync,fsid=0,crossmnt,no_subtree_check)
+# /srv/nfs4/homes  gss/krb5i(rw,sync,no_subtree_check)
+#
+/nfs/aa 192.168.152.0/24(rw,sync,no_root_squash,no_all_squash)
+/nfs/sc 192.168.152.0/24(rw,sync,no_root_squash,no_all_squash)
+
+rw： 这个选项表示允许客户端以读写方式挂载共享。也就是说，客户端可以对共享目录中的文件进行读取和写入操作。
+
+sync： 这个选项指定 NFS 服务器在收到写操作请求时立即将数据写入到磁盘中，并等待写操作完成后再返回。这可以确保数据的一致性，但可能会影响性能。
+
+no_root_squash： 这个选项禁止了 root 用户的权限被限制（"root squashing"）。通常情况下，NFS 服务器会将 root 用户的操作映射为匿名用户，以提高安全性。使用这个选项可以允许 root 用户拥有共享目录的完全权限。
+
+no_all_squash： 这个选项禁止了所有用户的权限被限制（"all squashing"）。类似于 no_root_squash，这个选项允许所有用户拥有共享目录的完全权限。
+
+
+root@harbor:~# mkdir -p /nfs/{pv,sc}
+root@harbor:~# echo "this is pv-pvc test" > /nfs/pv/index.html
+
+# all node install
+ansible k8s -m shell -a "apt update"
+ansible k8s -m shell -a "apt install nfs-common -y" 
+
+
+
+root@master1:~# kubectl apply -f pv-example.yaml
+root@master1:~# kubectl apply -f pvc-example.yaml
+root@master1:~# kubectl apply -f test-pv-pvc.yaml
+
+root@master1:~# curl http://test-pvc.bar.com --resolve test-pvc.bar.com:80:192.168.152.210
+this is pv-pvc test
+
+
+# 验证持久化
+root@master1:~# kubectl delete -f test-pv-pvc.yaml
+root@harbor:~# cat  /nfs/pv/index.html
+this is pv-pvc test
+```
+
+2. 基于storageclass的动态 Provisioning
+```bash 
+root@master1:~/k8s_kubeadm_install# kubectl apply  -f files/nfs_volume/storageclass/sc-rbac.yaml
+root@master1:~/k8s_kubeadm_install# kubectl apply  -f files/nfs_volume/storageclass
+root@master1:~/k8s_kubeadm_install# kubectl apply -f test-sc.yaml -f scm-pvc.yaml -f sc.yaml -f provisioner.yaml
+deployment.apps/nginx-pvc-example created
+service/nginx-sc-service created
+ingress.networking.k8s.io/sc-nginx-ing created
+persistentvolumeclaim/scm-pvc created
+storageclass.storage.k8s.io/sc-storage created
+deployment.apps/nfs-client-provisioner created
+
+root@master1:~/k8s_kubeadm_install# kubectl get sc
+NAME         PROVISIONER        RECLAIMPOLICY   VOLUMEBINDINGMODE   ALLOWVOLUMEEXPANSION   AGE
+sc-storage   sc-storage-class   Delete          Immediate           true                   5m41s
+
+
+root@master1:~/k8s_kubeadm_install# kubectl get pv
+NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM             STORAGECLASS   REASON   AGE
+pvc-e8cb26b6-7818-4211-a17e-2ebf1a8ffc87   10Gi       RWO            Delete           Bound    default/scm-pvc   sc-storage              6m13s
+
+root@master1:~/k8s_kubeadm_install# kubectl get pvc
+NAME      STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+scm-pvc   Bound    pvc-e8cb26b6-7818-4211-a17e-2ebf1a8ffc87   10Gi       RWO            sc-storage     6m36
+
+root@harbor:/nfs/sc# ls
+default-scm-pvc-pvc-29e2dd5c-7fcd-44c4-b235-a2329cfc3be2
+root@harbor:/nfs/sc# echo "this is sc test" > default-scm-pvc-pvc-29e2dd5c-7fcd-44c4-b235-a2329cfc3be2/index.html
+
+root@master1:~/k8s_kubeadm_install# curl http://test-sc.bar.com --resolve test-sc.bar.com:80:192.168.152.210
+this is sc test
+
+
+```
+3. helm安装
+```bash 
+https://github.com/helm/helm/tags
+wget https://get.helm.sh/helm-${version}-linux-amd64.tar.gz
+tar -zxvf helm-${version}-linux-amd64.tar.gz
+root@master1:~/k8s_kubeadm_install# mv files/helm/install_helm/helm /usr/local/bin/helm
+root@master1:~/k8s_kubeadm_install# chmod +x /usr/local/bin/helm
+```
+
+4. 使用helm安装jms
+```bash 
+helm repo add jumpserver https://jumpserver.github.io/helm-charts
+helm repo list
+vi values.yaml
+https://github.com/jumpserver/helm-charts/blob/main/charts/jumpserver/values.yaml
+
+4  imageRegistry: docker.io
+
+21  storageClass: "sc-storage"
+
+67    hosts:
+68    - "ayyq.jumpserver.example"
+
+82  secretKey: "LB47qqmfyBZ1RrzJrhY8rwDB8bv9cuYwscDeFCS7Bg90EnOIsV"
+    ## Generate a new random bootstrap token by execute `cat /dev/urandom | tr -dc A-Za-z0-9 | head -c 24`
+84    bootstrapToken: "DfzASZTSAnePAuxA0UBG4FDR"
+
+
+# 安装数据库和redis
+root@master1:~/k8s_kubeadm_install# kubectl apply -f files/helm/jms/mysql.yaml -f files/helm/jms/redis.yaml
+root@master1:~/k8s_kubeadm_install# kubectl exec -it mysql-deployment-75d4df5d9c-pqfdb -- bash
+
+bash-4.4# mysql -uroot -pjumpserver
+mysql> CREATE DATABASE jumpserver DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci;
+Query OK, 1 row affected, 2 warnings (0.01 sec)
+
+mysql> CREATE USER 'jumpserver'@'%' IDENTIFIED BY 'jumpserver';
+Query OK, 0 rows affected (0.01 sec)
+
+mysql> GRANT ALL PRIVILEGES ON  jumpserver.* TO 'jumpserver'@'%';
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> FLUSH PRIVILEGES;
+Query OK, 0 rows affected (0.00 sec)
+
+# 安装
+helm install jms-k8s jumpserver/jumpserver -n default -f values.yaml
+# 或自己打包
+tar -czvf jms.tgz jumpserver
+root@master1:~/k8s_kubeadm_install# helm install jms-k8s files/helm/jms/jms.tgz
+
+# 卸载
+helm uninstall jms-k8s -n default
+```
+
 

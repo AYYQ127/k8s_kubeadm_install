@@ -1,0 +1,8 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: sc-storage # storageclass的名字
+provisioner: sc-storage-class # 必须与provisioner.yaml中PROVISIONER_NAME的值一致
+parameters:
+  archiveOnDelete: "true"  ## 删除pv的时候，pv的内容是否要备份
+allowVolumeExpansion: true  #如果对PVC扩容，则其对应的"storage class"中allowVolumeExpansion字段需要设置成true：

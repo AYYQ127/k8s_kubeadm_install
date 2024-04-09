@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment # provisioner的类型是一个deployment
+metadata:
+  name: nfs-client-provisioner
+  labels:
+    app: nfs-client-provisioner
+  namespace: default # 指定provisioner所属的namespace，改成你自己的namespace
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: nfs-client-provisioner
+  template:
+    metadata:
+      labels:
+        app: nfs-client-provisioner
+    spec:
+      serviceAccountName: nfs-client-provisioner # 指定provisioner使用的sa
+      containers:
+        - name: nfs-client-provisioner
+          image: vbouchaud/nfs-client-provisioner:latest # 指定provisioner的镜像
+          volumeMounts:
+            - name: nfs-client-root
+              mountPath: /persistentvolumes # 固定写法
+          env:
+            - name: PROVISIONER_NAME
+              value: sc-storage-class # 指定分配器的名称，创建storageclass会用到
+            - name: NFS_SERVER
+              value: 192.168.152.220 # 指定使用哪一块存储，这里用的是nfs，此处填写nfs的地址
+            - name: NFS_PATH
+              value: /nfs/sc # 使用nfs哪一块盘符
+      volumes:
+        - name: nfs-client-root
+          nfs:
+            server: 192.168.152.220 # 和上面指定的nfs地址保持一致
+            path: /nfs/sc # 和上面指定的盘符保持一致
+
+
+# kubectl apply -f provisioner.yaml 

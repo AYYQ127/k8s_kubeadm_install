@@ -1,0 +1,14 @@
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: scm-pvc
+  namespace: default
+spec:
+  storageClassName: sc-storage # 需要与上面创建的storageclass的名称一致
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+
+
