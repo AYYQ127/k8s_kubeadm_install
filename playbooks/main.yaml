@@ -460,6 +460,7 @@
             src: ../files/kube-cert/update-kubeadm-cert.sh
             dest: /root/k8s_install/update-kubeadm-cert.sh
             mode: '0755'
+          delegate_to: "{{ item }}"
           loop: "{{ groups['masters'] }}"
 
         - name: 4.4.1:修改apiserver证书时间为10年,执行修改脚本
