@@ -989,4 +989,109 @@ root@master1:~/k8s_kubeadm_install# helm install jms-k8s files/helm/jms/jms.tgz
 helm uninstall jms-k8s -n default
 ```
 
+### 证书过期设置
+查看证书有效期
+```bash
+root@master1:~# openssl x509 -noout -text -in /etc/kubernetes/pki/apiserver.crt | awk '/Validity/,/Subject:/ { if ($1 == "Not" && ($2 == "Before:" || $2 == "After" )) print $0 }'
+            Not Before: Jun 18 09:16:19 2024 GMT
+            Not After : Jun 16 09:16:19 2035 GMT
+
+```
+https://github.com/yuyicai/update-kube-cert/blob/master/README-zh_CN.md
+```
+该脚本用于处理已过期或者即将过期的 kubernetes 集群证书
+
+该脚本适用于所有 k8s 版本集群证书更新(使用 kubeadm 初始化的集群)
+
+kubeadm 生成的证书有效期为 1 年，该脚本可将 kubeadm 生成的证书有效期更新为 10 年
+
+该脚本只处理 master 节点上的证书，worker node 节点的 kubelet 证书默认自动轮换更新，无需关心过期问题
+
+**如果有多个 master 节点，在每个 master 节点都执行一次**
+
+bash update-kubeadm-cert.sh all --cri containerd
+
+root@master1:~# openssl x509 -noout -text -in /etc/kubernetes/pki/apiserver.crt | awk '/Validity/,/Subject:/ { if ($1 == "Not" && ($2 == "Before:" || $2 == "After" )) print $0 }'
+            Not Before: Jun 18 09:16:19 2024 GMT
+            Not After : Jun 16 09:16:19 2034 GMT
+
+root@master1:/home/ubuntu/k8s_kubeadm_install# kubeadm certs check-expiration
+[check-expiration] Reading configuration from the cluster...
+[check-expiration] FYI: You can look at this config file with 'kubectl -n kube-system get cm kubeadm-config -o yaml'
+
+CERTIFICATE                EXPIRES                  RESIDUAL TIME   CERTIFICATE AUTHORITY   EXTERNALLY MANAGED
+admin.conf                 Jun 19, 2034 06:34 UTC   9y              ca                      no
+apiserver                  Jun 19, 2034 06:34 UTC   9y              ca                      no
+apiserver-etcd-client      Jun 19, 2034 06:34 UTC   9y              etcd-ca                 no
+apiserver-kubelet-client   Jun 19, 2034 06:34 UTC   9y              ca                      no
+controller-manager.conf    Jun 19, 2034 06:34 UTC   9y              ca                      no
+etcd-healthcheck-client    Jun 19, 2034 06:34 UTC   9y              etcd-ca                 no
+etcd-peer                  Jun 19, 2034 06:34 UTC   9y              etcd-ca                 no
+etcd-server                Jun 19, 2034 06:34 UTC   9y              etcd-ca                 no
+front-proxy-client         Jun 19, 2034 06:34 UTC   9y              front-proxy-ca          no
+scheduler.conf             Jun 19, 2034 06:34 UTC   9y              ca                      no
+super-admin.conf           Jun 19, 2034 06:34 UTC   9y              ca                      no
+
+CERTIFICATE AUTHORITY   EXPIRES                  RESIDUAL TIME   EXTERNALLY MANAGED
+ca                      Jun 19, 2034 06:34 UTC   9y              no
+etcd-ca                 Jun 19, 2034 06:34 UTC   9y              no
+front-proxy-ca          Jun 19, 2034 06:34 UTC   9y              no
+
+```
+
+
+
+### 离线安装
+由于docker无法再正常使用，对于初学者有一定的使用门槛，我已经将所需镜像全部打包好，需要的可以关注公众号私信获取。  
+较以前相比，安装命令没有任何变化。
+```text
+├── v1.28.4
+│   ├── coredns-v1.10.1.tar
+│   ├── docker.io-calico-apiserver-v3.26.3.tar
+│   ├── docker.io-calico-cni-v3.26.3.tar
+│   ├── docker.io-calico-csi_v3.26.3.tar
+│   ├── docker.io-calico-kube-controllers_v3.26.3.tar
+│   ├── docker.io-calico-node-driver-registrar-v3.26.3.tar
+│   ├── docker.io-calico-node-v3.26.3.tar
+│   ├── docker.io-calico-pod2daemon_flexvol-v3.26.3.tar
+│   ├── docker.io-calico-typha-v3.26.3.tar
+│   ├── etcd-3.5.9-0.tar
+│   ├── kube-apiserver-v1.28.4.tar
+│   ├── kube-controller-manager-v1.28.4.tar
+│   ├── kube-proxy-v1.28.4.tar
+│   ├── kube-scheduler-v1.28.4.tar
+│   └── pause-3.9.tar
+├── v1.29.6
+│   ├── coredns-v1.11.1.tar
+│   ├── docker.io-calico-apiserver-v3.28.0.tar
+│   ├── docker.io-calico-cni-v3.28.0.tar
+│   ├── docker.io-calico-csi-v3.28.0.tar
+│   ├── docker.io-calico-kube-controllers-v3.28.0.tar
+│   ├── docker.io-calico-node-driver-registrar-v3.28.0.tar
+│   ├── docker.io-calico-node-v3.28.0.tar
+│   ├── docker.io-calico-pod2daemon-flexvol-v3.28.0.tar
+│   ├── docker.io-calico-typha-v3.28.0.tar
+│   ├── etcd-3.5.12-0.tar
+│   ├── kube-apiserver-v1.29.6.tar
+│   ├── kube-controller-manager-v1.29.6.tar
+│   ├── kube-proxy-v1.29.6.tar
+│   ├── kube-scheduler-v1.29.6.tar
+│   └── pause-3.9.tar
+└── v1.30.2
+    ├── coredns-v1.11.1.tar
+    ├── docker.io-calico-apiserver-v3.28.0.tar
+    ├── docker.io-calico-cni-v3.28.0.tar
+    ├── docker.io-calico-csi-v3.28.0.tar
+    ├── docker.io-calico-kube-controllers-v3.28.0.tar
+    ├── docker.io-calico-node-driver-registrar-v3.28.0.tar
+    ├── docker.io-calico-node-v3.28.0.tar
+    ├── docker.io-calico-pod2daemon-flexvol-v3.28.0.tar
+    ├── docker.io-calico-typha-v3.28.0.tar
+    ├── etcd-3.5.12-0.tar
+    ├── kube-apiserver-v1.30.2.tar
+    ├── kube-controller-manager-v1.30.2.tar
+    ├── kube-proxy-v1.30.2.tar
+    ├── kube-scheduler-v1.30.2.tar
+    └── pause-3.9.tar
+```
 

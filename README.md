@@ -22,10 +22,10 @@ https://docs.tigera.io/calico/latest/getting-started/kubernetes/requirements#kub
 https://docs.tigera.io/calico/latest/getting-started/kubernetes/quickstart
 
 # 需要提前下载对应版本tigera-operator.yaml到files目录，其他操作不用做
-https://raw.githubusercontent.com/projectcalico/calico/v3.26.4/manifests/tigera-operator.yaml
+https://raw.githubusercontent.com/projectcalico/calico/v3.28.0/manifests/tigera-operator.yaml
 
 # 需要提前下载对应版本custom-resources.yaml到files目录，其他操作不用做
-https://raw.githubusercontent.com/projectcalico/calico/v3.26.4/manifests/custom-resources.yaml
+https://raw.githubusercontent.com/projectcalico/calico/v3.28.0/manifests/custom-resources.yaml
 
 # 将下载的文件放至files/calico,并按"文件名_version"格式命名
 ```
@@ -35,7 +35,7 @@ https://raw.githubusercontent.com/projectcalico/calico/v3.26.4/manifests/custom-
 # 查看支持版本
 https://github.com/kubernetes/ingress-nginx/blob/main/README.md#readme
 
-version=v1.9.4
+version=v1.10.1
 
 # 快速部署
 https://kubernetes.github.io/ingress-nginx/deploy/#quick-start
@@ -258,6 +258,9 @@ kubectl create secret docker-registry harbor-auth \
 apt版本
 ```bash
 root@master1:/etc/apt/sources.list.d# apt-cache madison kubeadm
+   kubeadm | 1.30.2-1.1 | https://pkgs.k8s.io/core:/stable:/v1.30/deb  Packages
+   kubeadm | 1.30.1-1.1 | https://pkgs.k8s.io/core:/stable:/v1.30/deb  Packages
+   kubeadm | 1.30.0-1.1 | https://pkgs.k8s.io/core:/stable:/v1.30/deb  Packages
    kubeadm | 1.29.0-1.1 | https://pkgs.k8s.io/core:/stable:/v1.29/deb  Packages
    kubeadm | 1.28.5-1.1 | https://pkgs.k8s.io/core:/stable:/v1.28/deb  Packages
    kubeadm | 1.28.4-1.1 | https://pkgs.k8s.io/core:/stable:/v1.28/deb  Packages

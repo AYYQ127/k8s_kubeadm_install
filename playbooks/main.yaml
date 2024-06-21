@@ -273,7 +273,26 @@
             create: yes
           delegate_to: "{{ item }}"
           loop: "{{ groups['manage_node'] }}"
-        - name: 3.11:创建安装lock文件
+        
+        - name: 3.11:请确认你安装的版本号为v1.28.4,v1.29.6,v1.30.2其中之一,若不是,请自行解决镜像问题。
+          pause:
+            seconds: 15 
+        - name: 3.11.1:导入v{{kubernetes_version}}镜像第一步,复制脚本
+          copy:
+            content: |
+              for i in $(cd /root/k8s_install/v{{kubernetes_version}} && ls); do ctr -n=k8s.io images import /root/k8s_install/v{{kubernetes_version}}/$i; done
+            dest: /root/k8s_install/ctr_import.sh
+            mode: '0755'
+        - name: 3.11.2:导入v{{kubernetes_version}}镜像第二步, 复制镜像tar包
+          copy:
+            src: ../files/docker-images/v{{kubernetes_version}}
+            dest: /root/k8s_install/
+          failed_when: false
+        - name: 3.11.3:导入v{{kubernetes_version}}镜像第三步, 执行导入脚本
+          shell: bash /root/k8s_install/ctr_import.sh
+          failed_when: false
+
+        - name: 3.12:创建安装lock文件
           file: 
             path: /root/k8s_install/install_kubeadmin.lock
             state: touch        
@@ -420,7 +439,7 @@
 
 
 
-    - name: 4.安装ingress
+    - name: 4.安装ingress,修改apiserver证书时间为10年
       block:
         - name: 4.1:ingress github地址,查看版本对应关系
           debug:
@@ -435,7 +454,22 @@
         - name: 4.3:安装ingress使用如下命令
           shell: kubectl create -f ../files/ingress/deploy_{{ingress_version}}.yaml
         
-        - name: 4.4:创建安装lock文件
+
+        - name: 4.4:修改apiserver证书时间为10年,复制修改脚本
+          copy:
+            src: ../files/kube-cert/update-kubeadm-cert.sh
+            dest: /root/k8s_install/update-kubeadm-cert.sh
+            mode: '0755'
+          loop: "{{ groups['masters'] }}"
+
+        - name: 4.4.1:修改apiserver证书时间为10年,执行修改脚本
+          shell: bash /root/k8s_install/update-kubeadm-cert.sh all --cri containerd && touch /root/k8s_install/update_kubeadm_cert.lock
+          args:
+            creates: /root/k8s_install/update_kubeadm_cert.lock
+          delegate_to: "{{ item }}"
+          loop: "{{ groups['masters'] }}"
+
+        - name: 4.5:创建安装lock文件
           file: 
             path: /root/k8s_install/after_install.lock
             state: touch
