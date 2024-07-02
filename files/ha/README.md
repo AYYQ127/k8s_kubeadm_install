@@ -11,6 +11,8 @@ https://openresty.org/cn/linux-packages.html#ubuntu
 ansible-playbook playbooks/main-ubuntu2204-ha.yaml
 ```
 ### 高可用集群
+在高可用集群中，如果一个节点发生故障，系统可以自动将工作负载转移到其他健康节点。这种自动化的故障转移机制确保了服务的连续性和可靠性
+![图片来自k8s官网](https://kubernetes.io/zh-cn/docs/images/kubeadm-ha-topology-stacked-etcd.svg)
 
 #### 集群规划
 主机名 | IP | 用途 
