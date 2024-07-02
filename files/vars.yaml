@@ -1,7 +1,25 @@
 # 时间服务器
 NTP: 192.168.152.200
 
+# 用于高可用的主机列表ip
+all_masters:
+  - 172.16.1.35
+  - 172.16.1.36
+  - 172.16.1.37
+
+# certSANs高可用dns白名单配置
+certSANs:
+  - 172.16.1.35
+  - 172.16.1.36
+  - 172.16.1.37
+  - 127.0.0.1
+  - master1
+  - master2
+  - master3
+  - ha-apiserveraddr
+
 # 控制面板主机名，不需要修改，固定为[manage_node]
+# 如果需要高可用，请将这里改成，kubeadm时会用到control_plane_endpoint: ha-apiserveraddr:16443
 control_plane_endpoint: master1
 
 # kubeadm init使用，大版本号，不需要后缀

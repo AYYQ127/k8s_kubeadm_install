@@ -1,0 +1,23 @@
+# nginx.conf
+user root;
+worker_processes 1;
+
+error_log  /usr/local/openresty/nginx/logs/kube-error.log warn;
+
+events {
+    worker_connections  3000;
+}
+
+stream {
+    upstream backend {
+        {% for ip in all_masters %}
+        server {{ ip }}:6443    max_fails=2 fail_timeout=3s;
+        {% endfor %}
+    }
+
+    server {
+        listen 127.0.0.1:16443;
+        proxy_connect_timeout 1s;
+        proxy_pass backend;
+    }
+}

@@ -5,7 +5,9 @@ https://github.com/AYYQ127/k8s_kubeadm_install
 ## 示例
 
 ### 系统环境
-ubuntu20.04
+ubuntu22.04  
+**如果计划使用高可用，请安装ubuntu22.04版本系统**  
+[高可用集群](files/ha/README.md)
 
 ### 集群规划
 主机名可以不用改强制修改为这样，只需要主机名，/etc/hosts和/etc/ansible/hosts都一致即可

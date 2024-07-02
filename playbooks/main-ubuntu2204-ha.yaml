@@ -298,7 +298,57 @@
             state: touch        
       when: not install_file_exists.stat.exists
 
-- name: 第三步 初始化集群,添加工作节点
+- name: 第三步 安装openresty
+  hosts: masters
+  gather_facts: no
+  vars_files: ../files/vars.yaml
+  tags: openresty_install
+  tasks:
+    - name: 1:检查openresty_install.lock文件是否存在
+      stat:
+        path: /root/k8s_install/openresty_install.lock
+      register: openresty_install_file_exists
+      
+    - name: 1.安装openresty
+      block:
+        - name: 1.1:添加openresty.gpg
+          copy: 
+            src: ../files/ha/openresty.gpg 
+            dest: /usr/share/keyrings/openresty.gpg
+        - name: 1.2:添加openresty apt镜像源
+          copy: 
+            src: ../files/ha/openresty.list 
+            dest: /etc/apt/sources.list.d/openresty.list
+        - name: 1.3:apt update 
+          apt:
+            update_cache: yes
+        - name: 1.4:安装openresty
+          apt:
+            name: openresty
+            state: present
+          failed_when: false
+        - name: 1.5:复制openresty配置到masters中
+          template:
+            src: ../files/ha/templates/nginx.conf.j2
+            dest: /usr/local/openresty/nginx/conf/nginx.conf
+            mode: '0644'
+        - name: 1.6:添加ha-apiserveraddr解析
+          lineinfile:
+            path: /etc/hosts
+            line: 127.0.0.1 ha-apiserveraddr
+            create: yes
+        - name: 1.7:重启openresty
+          service:
+            name: openresty
+            state: restarted
+        - name: 1.8:创建安装lock文件
+          file: 
+            path: /root/k8s_install/openresty_install.lock
+            state: touch    
+      when: not openresty_install_file_exists.stat.exists
+
+
+- name: 第四步 初始化集群,添加工作节点
   hosts: localhost
   gather_facts: no
   vars_files: ../files/vars.yaml
@@ -308,10 +358,10 @@
       stat:
         path: /root/k8s_install/after_install.lock
       register: after_install_file_exists
-      
-    - name: 1.执行kubeadm init
+
+    - name: 2.执行kubeadm init
       block:
-        - name: 1.1:将初始化的命令写入一个脚本，用脚本执行
+        - name: 2.1:将初始化的命令写入一个脚本，用脚本执行
           copy:
             content: |
               kubeadm init --control-plane-endpoint={{control_plane_endpoint}} --image-repository=registry.aliyuncs.com/google_containers --kubernetes-version={{kubernetes_version}} --pod-network-cidr={{pod_network_cidr}} --apiserver-advertise-address={{apiserver_advertise_address}} --cri-socket unix://var/run/containerd/containerd.sock
@@ -319,32 +369,32 @@
             dest: /root/k8s_install/kubeadm_init.sh
             mode: '0755'
 
-        - name: 1.2:执行脚本
+        - name: 2.2:执行脚本
           shell: /root/k8s_install/kubeadm_init.sh
           args:
             creates: /root/k8s_install/init.lock
 
-        - name: 1.3:创建.kube目录等
+        - name: 2.3:创建.kube目录等
           shell: mkdir -p $HOME/.kube && cp -f /etc/kubernetes/admin.conf $HOME/.kube/config && chown $(id -u):$(id -g) $HOME/.kube/config && touch /root/k8s_install/kube.lock
           args:
             creates: /root/k8s_install/kube.lock
-        - name: 1.4:如果异常退出
+        - name: 2.4:如果异常退出
           debug:
             msg: |
               需要在manage_node节点执行kubeadm reset 并删除rm /root/k8s_install/{init.lock,kube.lock}
       when: not after_install_file_exists.stat.exists
 
-    - name: 2.添加节点到集群
+    - name: 3.添加节点到集群
       block:
-        - name: 2.1:重新生成join命令
+        - name: 3.1:重新生成join命令
           shell: kubeadm token create --print-join-command 
           register: join_command
 
-        - name: 2.2:生成证书密钥
+        - name: 3.2:生成证书密钥
           shell: kubeadm init phase upload-certs --upload-certs 2>&1 | tail -n 1
           register: certificate_key
 
-        - name: 2.3:将nodes节点join命令写入一个脚本,用脚本执行
+        - name: 3.3:将nodes节点join命令写入一个脚本,用脚本执行
           copy:
             content: |
               {{ item }}
@@ -352,7 +402,7 @@
             mode: '0755'
           with_items: "{{ join_command.stdout_lines }}" 
 
-        - name: 2.4:将other_masters节点join命令写入一个脚本,用脚本执行
+        - name: 3.4:将other_masters节点join命令写入一个脚本,用脚本执行
           copy:
             content: |
               {{ item }} --control-plane --certificate-key {{ certificate_key.stdout }}
@@ -361,7 +411,7 @@
           with_items: "{{ join_command.stdout_lines }}"
           when: groups['other_masters']|length > 0
  
-        - name: 2.5:复制nodes节点join脚本到nodes节点
+        - name: 3.5:复制nodes节点join脚本到nodes节点
           copy:
             src: /root/k8s_install/nodes_join_command.sh
             dest: /root/k8s_install/nodes_join_command.sh
@@ -369,7 +419,7 @@
           delegate_to: "{{ item }}"
           loop: "{{ groups['nodes'] }}"
 
-        - name: 2.6:复制other_masters节点join脚本到other_masters节点,如果有的话
+        - name: 3.6:复制other_masters节点join脚本到other_masters节点,如果有的话
           copy:
             src: /root/k8s_install/control_plane_join_command.sh
             dest: /root/k8s_install/control_plane_join_command.sh
@@ -378,14 +428,14 @@
           loop: "{{ groups['other_masters'] }}"
           when: groups['other_masters']|length > 0
         
-        - name: 2.7:nodes节点执行join_command
+        - name: 3.7:nodes节点执行join_command
           shell: /root/k8s_install/nodes_join_command.sh && touch /root/k8s_install/join.lock
           args:
             creates: /root/k8s_install/join.lock
           delegate_to: "{{ item }}"
           loop: "{{ groups['nodes'] }}"
 
-        - name: 2.8:other_masters节点执行 join_command
+        - name: 3.8:other_masters节点执行 join_command
           shell: /root/k8s_install/control_plane_join_command.sh && touch /root/k8s_install/join.lock
           args:
             creates: /root/k8s_install/join.lock
@@ -393,69 +443,115 @@
           loop: "{{ groups['other_masters'] }}"
           when: groups['other_masters']|length > 0
 
-        - name: 2.9:为nodes节点添加角色
+        - name: 3.9:为nodes节点添加角色
           shell: kubectl label nodes "{{ item }}" node-role.kubernetes.io/node=node
           args:
             creates: /root/k8s_install/label.lock
           loop: "{{ groups['nodes'] }}"
-
-        - name: 2.10:创建label.lock文件
+        
+        - name: 3.10:删除污点
+          shell: kubectl taint nodes "{{ item }}" node-role.kubernetes.io/control-plane:NoSchedule-
+          args:
+            creates: /root/k8s_install/label.lock
+          loop: "{{ groups['masters'] }}"
+          failed_when: false
+        - name: 3.11:创建label.lock文件
           file: 
             path: /root/k8s_install/label.lock
             state: touch
+        - name: 3.11:添加kubeadm-config的certSANs
+          shell: kubectl -n kube-system get configmap kubeadm-config -o jsonpath='{.data.ClusterConfiguration}' > /root/k8s_install/kubeadm-config.yaml
+          args:
+            creates: /root/k8s_install/kubeadm-config.lock
+        - name: 3.13:创建kubeadm-config.lock文件
+          file:
+            path: /root/k8s_install/kubeadm-config.lock
+            state: touch
+        - name: 把文件读成变量
+          slurp:
+            src: /root/k8s_install/kubeadm-config.yaml
+          register: kubeadm_config_content
 
-        - name: 2.11:如果异常退出
+        - name: 生成最终文件
+          copy:
+            content: |
+              {% set config = kubeadm_config_content.content | b64decode | from_yaml %}
+              {% set _ = config.apiServer.update({'certSANs': certSANs}) %}
+              {{ config | to_nice_yaml }}
+            dest: /root/k8s_install/kubeadm-config.yaml
+        - name: 重新生成apiserver证书,备份旧证书
+          shell: mv /etc/kubernetes/pki/apiserver.crt /etc/kubernetes/pki/apiserver.crt_older ;mv /etc/kubernetes/pki/apiserver.key /etc/kubernetes/pki/apiserver.key_older
+
+        - name: 重新生成apiserver证书
+          shell: kubeadm init phase certs apiserver --config /root/k8s_install/kubeadm-config.yaml
+        
+        - name: 重启apiserver加载新证书,先将apisever的yaml移走过一会再移动回去
+          shell: mv /etc/kubernetes/manifests/kube-apiserver.yaml /root/k8s_install/kube-apiserver.yaml
+
+        - name: 暂定10秒
+          pause:
+            seconds: 10
+        
+        - name: 将证书移动回去
+          shell: mv /root/k8s_install/kube-apiserver.yaml /etc/kubernetes/manifests/kube-apiserver.yaml 
+
+        - name: 先将修改后的kubeadm.yaml转换成可以加载的格式
+          shell: kubeadm config migrate --old-config /root/k8s_install/kubeadm-config.yaml --new-config /root/k8s_install/new-kubeadm-config.yaml
+
+        - name: 上传kubeadm-config.yaml
+          shell: kubeadm init phase upload-config kubeadm --config /root/k8s_install/new-kubeadm-config.yaml
+
+
+        - name: 3.12:如果异常退出
           debug:
             msg: |
               需要在所有nodes和other_masters分组节点执行kubeadm reset 并删除rm /root/k8s_install/{join.lock,label.lock}
 
       when: not after_install_file_exists.stat.exists
 
-    - name: 3.安装calico相关
+    - name: 4.安装calico相关
       block:
-        - name: 3.1:calico官网地址
+        - name: 4.1:calico官网地址
           debug:
             msg: |
               https://docs.tigera.io/calico/latest/about
 
-        - name: 3.2:快速部署参考地址
+        - name: 4.2:快速部署参考地址
           debug:
             msg: |
               https://docs.tigera.io/calico/latest/getting-started/kubernetes/quickstart
 
-        - name: 3.3:快速部署yaml
+        - name: 4.3:快速部署yaml
           shell: kubectl create -f ../files/calico/tigera-operator_{{calico_version}}.yaml
 
-        - name: 3.4:calico默认用的192.168.0.0作为pod的网络范围,初始化时我们使用的是{{pod_network}}所以需要修改
+        - name: 4.4:calico默认用的192.168.0.0作为pod的网络范围,初始化时我们使用的是{{pod_network}}所以需要修改
           lineinfile:
             path: ../files/calico/custom-resources_{{calico_version}}.yaml
             regexp: cidr
             line: '      cidr: {{pod_network}}'
             backup: yes
 
-        - name: 3.5:创建必要的自定义资源
+        - name: 4.5:创建必要的自定义资源
           shell: kubectl create -f ../files/calico/custom-resources_{{calico_version}}.yaml
       when: not after_install_file_exists.stat.exists
 
-
-
-    - name: 4.安装ingress,修改apiserver证书时间为10年
+    - name: 5.安装ingress,修改apiserver证书时间为10年
       block:
-        - name: 4.1:ingress github地址,查看版本对应关系
+        - name: 5.1:ingress github地址,查看版本对应关系
           debug:
             msg: |
               https://github.com/kubernetes/ingress-nginx/blob/main/README.md#readme
 
-        - name: 4.2:快速部署参考地址
+        - name: 5.2:快速部署参考地址
           debug:
             msg: |
               https://kubernetes.github.io/ingress-nginx/deploy/#quick-start
 
-        - name: 4.3:安装ingress使用如下命令
+        - name: 5.3:安装ingress使用如下命令
           shell: kubectl create -f ../files/ingress/deploy_{{ingress_version}}.yaml
         
 
-        - name: 4.4:修改apiserver证书时间为10年,复制修改脚本
+        - name: 5.4:修改apiserver证书时间为10年,复制修改脚本
           copy:
             src: ../files/kube-cert/update-kubeadm-cert.sh
             dest: /root/k8s_install/update-kubeadm-cert.sh
@@ -463,51 +559,51 @@
           delegate_to: "{{ item }}"
           loop: "{{ groups['masters'] }}"
 
-        - name: 4.4.1:修改apiserver证书时间为10年,执行修改脚本
+        - name: 5.4.1:修改apiserver证书时间为10年,执行修改脚本
           shell: bash /root/k8s_install/update-kubeadm-cert.sh all --cri containerd && touch /root/k8s_install/update_kubeadm_cert.lock
           args:
             creates: /root/k8s_install/update_kubeadm_cert.lock
           delegate_to: "{{ item }}"
           loop: "{{ groups['masters'] }}"
 
-        - name: 4.5:创建安装lock文件
+        - name: 5.5:创建安装lock文件
           file: 
             path: /root/k8s_install/after_install.lock
             state: touch
 
       when: not after_install_file_exists.stat.exists
 
-    - name: 5.如果成功
+    - name: 6.如果成功
       debug:
         msg: |
           你不会看到任何错误,可以执行../files下的test-ingress.yaml验证网络:kubectl apply -f files/test-ingress.yaml, kubectl get pod,svc,ing
 
-- name: 第四步[选装] 安装metrics
+- name: 第五步[选装] 安装metrics
   import_playbook: ./metrics_server_install.yaml
   tags:
     - metrics
     - never
 
-- name: 第五步[选装] 安装cert_manager
+- name: 第六步[选装] 安装cert_manager
   import_playbook: ./cert_manager_install.yaml
   tags:
     - cert_manager
     - never
 
 
-- name: 第六步[选装] dashboard
+- name: 第七步[选装] dashboard
   import_playbook: ./dashboard_install.yaml
   tags:
     - dashboard
     - never
 
-- name: 第七步[选装] prometheus
+- name: 第八步[选装] prometheus
   import_playbook: ./prometheus_install.yaml
   tags:
     - prometheus
     - never
 
-- name: 第八步[选装] harbor
+- name: 第九步[选装] harbor
   import_playbook: ./harbor_install.yaml
   tags:
     - harbor

@@ -1,0 +1,30 @@
+- name: 修改集群默认驱逐时间（所有节点）
+  hosts: masters
+  gather_facts: no
+  vars_files: ../../files/vars.yaml
+  tags: change_noexecute_time
+  tasks:
+    - name: 1:检查change_noexecute_time.lock文件是否存在
+      stat:
+        path: /root/k8s_install/change_noexecute_time.lock
+      register: change_noexecute_time_file_exists
+
+    - name: 修改集群默认驱逐时间
+      block:
+        - name: 将一个 Node 标记为不健康之前允许其无响应的时长上限,改为20秒
+          lineinfile:
+            path: /etc/kubernetes/manifests/kube-controller-manager.yaml
+            insertafter: "use-service-account-credentials"
+            line: "    - --node-monitor-grace-period=20s"
+        - name: 对污点 Unreachable:NoExecute 的容忍时长,改为60秒
+          lineinfile:
+            path: /etc/kubernetes/manifests/kube-apiserver.yaml
+            insertafter: "tls-private-key-file"
+            line: "    - --default-unreachable-toleration-seconds=60"
+        - name: 3.12:创建安装lock文件
+          file: 
+            path: /root/k8s_install/change_noexecute_time.lock
+            state: touch        
+      when: not change_noexecute_time_file_exists.stat.exists
+
+          

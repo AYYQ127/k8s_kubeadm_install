@@ -1,0 +1,2 @@
+# openresty 官方源 ubuntu22
+deb [arch=amd64 signed-by=/usr/share/keyrings/openresty.gpg] http://openresty.org/package/ubuntu focal main
