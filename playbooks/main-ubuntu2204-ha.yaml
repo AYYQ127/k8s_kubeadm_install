@@ -236,6 +236,7 @@
             - gnupg2
             - curl
             - software-properties-common
+            - nfs-common
 
         - name: 3.5:安装 kubelet kubeadm kubectl {{kube_3tools_version}}版本
           apt:
