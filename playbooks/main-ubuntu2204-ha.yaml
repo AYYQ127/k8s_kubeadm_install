@@ -355,10 +355,10 @@
   vars_files: ../files/vars.yaml
   tags: after_install
   tasks:
-    - name: 1:检查after_install.lock文件是否存在
+    - name: 1:检查init.lock文件是否存在
       stat:
-        path: /root/k8s_install/after_install.lock
-      register: after_install_file_exists
+        path: /root/k8s_install/init.lock
+      register: init_file_exists
 
     - name: 2.执行kubeadm init
       block:
@@ -383,15 +383,15 @@
           debug:
             msg: |
               需要在manage_node节点执行kubeadm reset 并删除rm /root/k8s_install/{init.lock,kube.lock}
-      when: not after_install_file_exists.stat.exists
+      when: not init_file_exists.stat.exists
+
+    - name: 检查join_command.lock文件是否存在
+      stat:
+        path: /root/k8s_install/join_command.lock
+      register: join_command_file_exists
 
     - name: 3.生成添加命令
       block:
-        - name: 1:检查join_command.lock文件是否存在
-          stat:
-            path: /root/k8s_install/join_command.lock
-          register: join_command_file_exists
-
         - name: 3.1:重新生成join命令
           shell: kubeadm token create --print-join-command 
           register: join_command
@@ -478,6 +478,11 @@
             msg: |
               需要在所有nodes和other_masters分组节点执行kubeadm reset 并删除rm /root/k8s_install/{join.lock,label.lock}    
 
+    - name: 检查certSANs.lock文件是否存在
+      stat:
+        path: /root/k8s_install/certSANs.lock
+      register: certSANs_file_exists
+
     - name: 3.添加kubeadm-config的certSANs,高可用配置
       block:
         - name: 3.11:添加kubeadm-config的certSANs
@@ -522,7 +527,17 @@
         - name: 上传kubeadm-config.yaml
           shell: kubeadm init phase upload-config kubeadm --config /root/k8s_install/new-kubeadm-config.yaml
 
-      when: not after_install_file_exists.stat.exists
+        - name: 5.5:创建安装lock文件
+          file: 
+            path: /root/k8s_install/certSANs.lock
+            state: touch
+
+      when: not certSANs_file_exists.stat.exists
+
+    - name: 检查calico.lock文件是否存在
+      stat:
+        path: /root/k8s_install/calico.lock
+      register: calico_file_exists    
 
     - name: 4.安装calico相关
       block:
@@ -548,7 +563,20 @@
 
         - name: 4.5:创建必要的自定义资源
           shell: kubectl create -f ../files/calico/custom-resources_{{calico_version}}.yaml
-      when: not after_install_file_exists.stat.exists
+
+        - name: 创建安装calico.lock文件
+          file: 
+            path: /root/k8s_install/calico.lock
+            state: touch   
+
+      when: not calico_file_exists.stat.exists
+
+
+    - name: 检查ingress.lock文件是否存在
+      stat:
+        path: /root/k8s_install/ingress.lock
+      register: ingress_file_exists 
+
 
     - name: 5.安装ingress,修改apiserver证书时间为10年
       block:
@@ -583,10 +611,10 @@
 
         - name: 5.5:创建安装lock文件
           file: 
-            path: /root/k8s_install/after_install.lock
+            path: /root/k8s_install/ingress.lock
             state: touch
 
-      when: not after_install_file_exists.stat.exists
+      when: not ingress_file_exists.stat.exists
 
     - name: 6.如果成功
       debug:
