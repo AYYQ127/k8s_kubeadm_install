@@ -13,77 +13,77 @@
           shell: kubectl apply -f ../files/metrics/components_{{metrics_server_version}}.yaml
       when: not metrics_exists.stat.exists
 
-- name: 开启聚合API
-  hosts: masters
-  gather_facts: no
-  tasks:
-    - name: 检查metrics.lock文件是否存在
-      stat:
-        path: /root/k8s_install/metrics.lock
-      register: metrics_exists
+# - name: 开启聚合API
+#   hosts: masters
+#   gather_facts: no
+#   tasks:
+#     - name: 检查metrics.lock文件是否存在
+#       stat:
+#         path: /root/k8s_install/metrics.lock
+#       register: metrics_exists
 
-    - name: 开启聚合API操作
-      block:
-        - name: 开启聚合API
-          lineinfile:
-            path: /etc/kubernetes/manifests/kube-apiserver.yaml
-            insertafter: "private"
-            line: "    - --enable-aggregator-routing=true"
+#     - name: 开启聚合API操作
+#       block:
+#         - name: 开启聚合API
+#           lineinfile:
+#             path: /etc/kubernetes/manifests/kube-apiserver.yaml
+#             insertafter: "private"
+#             line: "    - --enable-aggregator-routing=true"
 
-        - name: 重启kubelet
-          service:
-            name: kubelet
-            state: restarted
-      when: not metrics_exists.stat.exists
+#         - name: 重启kubelet
+#           service:
+#             name: kubelet
+#             state: restarted
+#       when: not metrics_exists.stat.exists
 
-- name: 为kubelet签发证书
-  hosts: k8s
-  gather_facts: no
-  tasks:
-    - name: 检查metrics.lock文件是否存在
-      stat:
-        path: /root/k8s_install/metrics.lock
-      register: metrics_exists
+# - name: 为kubelet签发证书
+#   hosts: k8s
+#   gather_facts: no
+#   tasks:
+#     - name: 检查metrics.lock文件是否存在
+#       stat:
+#         path: /root/k8s_install/metrics.lock
+#       register: metrics_exists
 
-    - name: 为kubelet签发证书操作
-      block:
-        - name: 在最后一行插入
-          lineinfile:
-            path: /var/lib/kubelet/config.yaml
-            insertafter: EOF
-            line: "serverTLSBootstrap: true"
+#     - name: 为kubelet签发证书操作
+#       block:
+#         - name: 在最后一行插入
+#           lineinfile:
+#             path: /var/lib/kubelet/config.yaml
+#             insertafter: EOF
+#             line: "serverTLSBootstrap: true"
 
-        - name: 重启kubelet
-          service:
-            name: kubelet
-            state: restarted
-      when: not metrics_exists.stat.exists
+#         - name: 重启kubelet
+#           service:
+#             name: kubelet
+#             state: restarted
+#       when: not metrics_exists.stat.exists
 
-- name: 签发证书
-  hosts: manage_node
-  gather_facts: no
-  tasks:
-    - name: 检查metrics.lock文件是否存在
-      stat:
-        path: /root/k8s_install/metrics.lock
-      register: metrics_exists
+# - name: 签发证书
+#   hosts: manage_node
+#   gather_facts: no
+#   tasks:
+#     - name: 检查metrics.lock文件是否存在
+#       stat:
+#         path: /root/k8s_install/metrics.lock
+#       register: metrics_exists
 
-    - name: 为kubelet签发证书操作
-      block:
-        - name: 暂停15秒
-          pause:
-            seconds: 15  
+#     - name: 为kubelet签发证书操作
+#       block:
+#         - name: 暂停15秒
+#           pause:
+#             seconds: 15  
 
-        - name: 获取新发证书名
-          shell: kubectl get certificatesigningrequests.certificates.k8s.io | grep kubelet-serving | awk '$6=="Pending" {print $1}'
-          register: Pending_csr
-          failed_when: false
+#         - name: 获取新发证书名
+#           shell: kubectl get certificatesigningrequests.certificates.k8s.io | grep kubelet-serving | awk '$6=="Pending" {print $1}'
+#           register: Pending_csr
+#           failed_when: false
 
-        - name: 正式签发证书
-          shell: kubectl certificate approve {{ item }}
-          with_items: "{{ Pending_csr.stdout_lines }}"
-          when: Pending_csr.stdout_lines | length > 0
-      when: not metrics_exists.stat.exists
+#         - name: 正式签发证书
+#           shell: kubectl certificate approve {{ item }}
+#           with_items: "{{ Pending_csr.stdout_lines }}"
+#           when: Pending_csr.stdout_lines | length > 0
+#       when: not metrics_exists.stat.exists
 
 - name: 创建lock文件
   hosts: k8s
