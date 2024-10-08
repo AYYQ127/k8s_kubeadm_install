@@ -137,6 +137,7 @@ spec:
         - --kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname
         - --kubelet-use-node-status-port
         - --metric-resolution=15s
+        - --kubelet-insecure-tls
         image: registry.cn-hangzhou.aliyuncs.com/google_containers/metrics-server:v0.6.4
         imagePullPolicy: IfNotPresent
         livenessProbe:
