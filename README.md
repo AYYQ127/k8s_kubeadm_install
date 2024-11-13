@@ -175,6 +175,7 @@ release-0.11 / 2022-06-15
 # 解决办法，如果你要使用NodePort方式访问，你可以删除这grafana-networkPolicy.yaml，
 # 再使用自动playboook执行
 # 本项目为了减少操作步骤，采用Ingress的方式访问，无需删除文件
+# 第二次踩坑，发现ingress也需要删除文件grafana-networkPolicy.yaml 
 
 
 # 替换镜像

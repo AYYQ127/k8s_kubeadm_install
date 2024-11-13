@@ -44,6 +44,9 @@ sandbox_image: pause:3.9
 
 # 有版本依赖，请参考README.md指引更换版本
 calico_version: v3.26.3
+# 如果在微软云部署，需要修改CrossSubnet为Always
+# kubectl get ippools -o yaml 将CrossSubnet改为Always
+# kubectl -n calico-system rollout restart ds calico-node。
 
 # 有版本依赖，请参考README.md指引更换版本
 ingress_version: v1.9.4
