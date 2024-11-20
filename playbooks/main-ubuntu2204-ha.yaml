@@ -211,7 +211,7 @@
 
     - name: 3.安装Kubernetes
       block:
-        - name: 3.1:添加k8s官方安装源的GPG 密钥
+        - name: 3.1:添加k8s官方安装源的GPG 密钥，如果过期需要重新生成gpg 参考https://kubernetes.io/zh-cn/blog/2023/08/15/pkgs-k8s-io-introduction/
           copy: 
             src: ../files/k8s_pkgs/kubernetes-apt-keyring.gpg
             dest: /etc/apt/kubernetes-apt-keyring.gpg
