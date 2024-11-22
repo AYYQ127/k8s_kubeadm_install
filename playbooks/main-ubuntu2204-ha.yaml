@@ -385,6 +385,11 @@
       stat:
         path: /root/k8s_install/join_command.lock
       register: join_command_file_exists
+    
+    - name: 检查证书密钥文件是否存在
+      stat:
+        path: /root/k8s_install/certificate_key.txt
+      register: certificate_key_file_exists
 
     - name: 3.生成添加命令
       block:
@@ -392,32 +397,39 @@
           shell: kubeadm token create --print-join-command 
           register: join_command
 
-        - name: 3.2:生成证书密钥
-          shell: kubeadm init phase upload-certs --upload-certs 2>&1 | tail -n 1
+        - name: 如果没有证书密钥文件则生成并保存
+          shell: kubeadm init phase upload-certs --upload-certs 2>&1 | tail -n 1 > /root/k8s_install/certificate_key.txt
+          when: not certificate_key_file_exists.stat.exists
+    
+        - name: 读取证书密钥
+          command: cat /root/k8s_install/certificate_key.txt
           register: certificate_key
+          when: certificate_key_file_exists.stat.exists
 
-        - name: 3.3:将nodes节点join命令写入一个脚本,用脚本执行
+        - name: 将nodes节点join命令写入脚本
           copy:
             content: |
               {{ item }}
             dest: /root/k8s_install/nodes_join_command.sh
             mode: '0755'
           with_items: "{{ join_command.stdout_lines }}" 
+          when: join_command.stdout_lines is defined and join_command.stdout_lines|length > 0
 
-        - name: 3.4:将other_masters节点join命令写入一个脚本,用脚本执行
+        - name: 将other_masters节点join命令写入脚本
           copy:
             content: |
               {{ item }} --control-plane --certificate-key {{ certificate_key.stdout }}
             dest: /root/k8s_install/control_plane_join_command.sh
             mode: '0755'
           with_items: "{{ join_command.stdout_lines }}"
-          when: groups['other_masters']|length > 0
+          when: groups['other_masters']|length > 0 and 
+                join_command.stdout_lines is defined and 
+                join_command.stdout_lines|length > 0
 
         - name: 创建lock文件
           file: 
             path: /root/k8s_install/join_command.lock
             state: touch
-      when: not join_command_file_exists.stat.exists
       
     - name: 3.复制join添加命令到节点
       block: 
