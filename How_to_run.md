@@ -306,6 +306,8 @@ root@master1:~/k8s_kubeadm_install# cp -r files/ansible /etc/
 ```bash
 root@master1:~/k8s_kubeadm_install# ansible k8s -m copy -a "src=/etc/hosts dest=/etc/hosts"
 root@master1:~/k8s_kubeadm_install# ansible k8s -m copy -a "src=/etc/apt/sources.list dest=/etc/apt/sources.list"
+# ubuntu24.04 apt源
+root@master1:~/k8s_kubeadm_install# ansible k8s -m copy -a "src=/etc/apt/sources.list.d/ubuntu.sources dest=/etc/apt/sources.list.d/ubuntu.sources"
 root@master1:~/k8s_kubeadm_install# ansible k8s -m apt -a "update_cache=yes"
 ```
 

@@ -159,7 +159,8 @@ https://github.com/prometheus-operator/kube-prometheus
 | [`release-0.11`](https://github.com/prometheus-operator/kube-prometheus/tree/release-0.11) | ✗               | ✔               | ✔               | ✗               | x               | x               | x               |
 | [`release-0.12`](https://github.com/prometheus-operator/kube-prometheus/tree/release-0.12) | ✗               | ✗               | ✔               | ✔               | x               | x               | x               |
 | [`release-0.13`](https://github.com/prometheus-operator/kube-prometheus/tree/release-0.13) | ✗               | ✗               | ✗               | x               | ✔               | ✔               | ✔               |
-| [`main`](https://github.com/prometheus-operator/kube-prometheus/tree/main)                 | ✗               | ✗               | ✗               | x               | x               | ✔               | ✔               |
+| [`release-0.14`](https://github.com/prometheus-operator/kube-prometheus/tree/release-0.14) | x               | x               | ✔               | ✔               | ✔               | x               | x               |
+| [`release-0.15`](https://github.com/prometheus-operator/kube-prometheus/tree/release-0.15) | x               | x               | x               | x               | ✔               | ✔               | ✔               |
 
 ```bash
 # 下载对应版本yaml文件
@@ -190,6 +191,11 @@ manifests/prometheusAdapter-deployment.yaml
 manifests/kubeStateMetrics-deployment.yaml
 35        image: docker.io/bitnami/kube-state-metrics:2.7.0
 
+# 0.15.0版本
+manifests/prometheusAdapter-deployment.yaml
+41        image: docker.io/v5cn/prometheus-adapter:v0.12.0
+manifests/kubeStateMetrics-deployment.yaml
+35        image: docker.io/bitnami/kube-state-metrics:2.15.0
 
 # 如果需要其他版本，需要按照相同的命名方式将release文件夹下载后解压，只保留manifests文件夹即可
 
@@ -258,17 +264,87 @@ kubectl create secret docker-registry harbor-auth \
 ### 官方源目前的版本
 apt版本
 ```bash
+# 重新生成添加k8s官方安装源的GPG 密钥，如果过期需要重新生成gpg
+# curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.28/deb/Release.key | sudo gpg --dearmor -o /etc/apt/kubernetes-apt-keyring.gpg
 root@master1:/etc/apt/sources.list.d# apt-cache madison kubeadm
+   kubeadm | 1.33.3-1.1 | https://pkgs.k8s.io/core:/stable:/v1.33/deb  Packages
+   kubeadm | 1.33.2-1.1 | https://pkgs.k8s.io/core:/stable:/v1.33/deb  Packages
+   kubeadm | 1.33.1-1.1 | https://pkgs.k8s.io/core:/stable:/v1.33/deb  Packages
+   kubeadm | 1.33.0-1.1 | https://pkgs.k8s.io/core:/stable:/v1.33/deb  Packages
+   kubeadm | 1.32.7-1.1 | https://pkgs.k8s.io/core:/stable:/v1.32/deb  Packages
+   kubeadm | 1.32.6-1.1 | https://pkgs.k8s.io/core:/stable:/v1.32/deb  Packages
+   kubeadm | 1.32.5-1.1 | https://pkgs.k8s.io/core:/stable:/v1.32/deb  Packages
+   kubeadm | 1.32.4-1.1 | https://pkgs.k8s.io/core:/stable:/v1.32/deb  Packages
+   kubeadm | 1.32.3-1.1 | https://pkgs.k8s.io/core:/stable:/v1.32/deb  Packages
+   kubeadm | 1.32.2-1.1 | https://pkgs.k8s.io/core:/stable:/v1.32/deb  Packages
+   kubeadm | 1.32.1-1.1 | https://pkgs.k8s.io/core:/stable:/v1.32/deb  Packages
+   kubeadm | 1.32.0-1.1 | https://pkgs.k8s.io/core:/stable:/v1.32/deb  Packages
+   kubeadm | 1.31.11-1.1 | https://pkgs.k8s.io/core:/stable:/v1.31/deb  Packages
+   kubeadm | 1.31.10-1.1 | https://pkgs.k8s.io/core:/stable:/v1.31/deb  Packages
+   kubeadm | 1.31.9-1.1 | https://pkgs.k8s.io/core:/stable:/v1.31/deb  Packages
+   kubeadm | 1.31.8-1.1 | https://pkgs.k8s.io/core:/stable:/v1.31/deb  Packages
+   kubeadm | 1.31.7-1.1 | https://pkgs.k8s.io/core:/stable:/v1.31/deb  Packages
+   kubeadm | 1.31.6-1.1 | https://pkgs.k8s.io/core:/stable:/v1.31/deb  Packages
+   kubeadm | 1.31.5-1.1 | https://pkgs.k8s.io/core:/stable:/v1.31/deb  Packages
+   kubeadm | 1.31.4-1.1 | https://pkgs.k8s.io/core:/stable:/v1.31/deb  Packages
+   kubeadm | 1.31.3-1.1 | https://pkgs.k8s.io/core:/stable:/v1.31/deb  Packages
+   kubeadm | 1.31.2-1.1 | https://pkgs.k8s.io/core:/stable:/v1.31/deb  Packages
+   kubeadm | 1.31.1-1.1 | https://pkgs.k8s.io/core:/stable:/v1.31/deb  Packages
+   kubeadm | 1.31.0-1.1 | https://pkgs.k8s.io/core:/stable:/v1.31/deb  Packages
+   kubeadm | 1.30.14-1.1 | https://pkgs.k8s.io/core:/stable:/v1.30/deb  Packages
+   kubeadm | 1.30.13-1.1 | https://pkgs.k8s.io/core:/stable:/v1.30/deb  Packages
+   kubeadm | 1.30.12-1.1 | https://pkgs.k8s.io/core:/stable:/v1.30/deb  Packages
+   kubeadm | 1.30.11-1.1 | https://pkgs.k8s.io/core:/stable:/v1.30/deb  Packages
+   kubeadm | 1.30.10-1.1 | https://pkgs.k8s.io/core:/stable:/v1.30/deb  Packages
+   kubeadm | 1.30.9-1.1 | https://pkgs.k8s.io/core:/stable:/v1.30/deb  Packages
+   kubeadm | 1.30.8-1.1 | https://pkgs.k8s.io/core:/stable:/v1.30/deb  Packages
+   kubeadm | 1.30.7-1.1 | https://pkgs.k8s.io/core:/stable:/v1.30/deb  Packages
+   kubeadm | 1.30.6-1.1 | https://pkgs.k8s.io/core:/stable:/v1.30/deb  Packages
+   kubeadm | 1.30.5-1.1 | https://pkgs.k8s.io/core:/stable:/v1.30/deb  Packages
+   kubeadm | 1.30.4-1.1 | https://pkgs.k8s.io/core:/stable:/v1.30/deb  Packages
+   kubeadm | 1.30.3-1.1 | https://pkgs.k8s.io/core:/stable:/v1.30/deb  Packages
    kubeadm | 1.30.2-1.1 | https://pkgs.k8s.io/core:/stable:/v1.30/deb  Packages
    kubeadm | 1.30.1-1.1 | https://pkgs.k8s.io/core:/stable:/v1.30/deb  Packages
    kubeadm | 1.30.0-1.1 | https://pkgs.k8s.io/core:/stable:/v1.30/deb  Packages
+   kubeadm | 1.29.15-1.1 | https://pkgs.k8s.io/core:/stable:/v1.29/deb  Packages
+   kubeadm | 1.29.14-1.1 | https://pkgs.k8s.io/core:/stable:/v1.29/deb  Packages
+   kubeadm | 1.29.13-1.1 | https://pkgs.k8s.io/core:/stable:/v1.29/deb  Packages
+   kubeadm | 1.29.12-1.1 | https://pkgs.k8s.io/core:/stable:/v1.29/deb  Packages
+   kubeadm | 1.29.11-1.1 | https://pkgs.k8s.io/core:/stable:/v1.29/deb  Packages
+   kubeadm | 1.29.10-1.1 | https://pkgs.k8s.io/core:/stable:/v1.29/deb  Packages
+   kubeadm | 1.29.9-1.1 | https://pkgs.k8s.io/core:/stable:/v1.29/deb  Packages
+   kubeadm | 1.29.8-1.1 | https://pkgs.k8s.io/core:/stable:/v1.29/deb  Packages
+   kubeadm | 1.29.7-1.1 | https://pkgs.k8s.io/core:/stable:/v1.29/deb  Packages
+   kubeadm | 1.29.6-1.1 | https://pkgs.k8s.io/core:/stable:/v1.29/deb  Packages
+   kubeadm | 1.29.5-1.1 | https://pkgs.k8s.io/core:/stable:/v1.29/deb  Packages
+   kubeadm | 1.29.4-2.1 | https://pkgs.k8s.io/core:/stable:/v1.29/deb  Packages
+   kubeadm | 1.29.3-1.1 | https://pkgs.k8s.io/core:/stable:/v1.29/deb  Packages
+   kubeadm | 1.29.2-1.1 | https://pkgs.k8s.io/core:/stable:/v1.29/deb  Packages
+   kubeadm | 1.29.1-1.1 | https://pkgs.k8s.io/core:/stable:/v1.29/deb  Packages
    kubeadm | 1.29.0-1.1 | https://pkgs.k8s.io/core:/stable:/v1.29/deb  Packages
+   kubeadm | 1.28.15-1.1 | https://pkgs.k8s.io/core:/stable:/v1.28/deb  Packages
+   kubeadm | 1.28.14-2.1 | https://pkgs.k8s.io/core:/stable:/v1.28/deb  Packages
+   kubeadm | 1.28.13-1.1 | https://pkgs.k8s.io/core:/stable:/v1.28/deb  Packages
+   kubeadm | 1.28.12-1.1 | https://pkgs.k8s.io/core:/stable:/v1.28/deb  Packages
+   kubeadm | 1.28.11-1.1 | https://pkgs.k8s.io/core:/stable:/v1.28/deb  Packages
+   kubeadm | 1.28.10-1.1 | https://pkgs.k8s.io/core:/stable:/v1.28/deb  Packages
+   kubeadm | 1.28.9-2.1 | https://pkgs.k8s.io/core:/stable:/v1.28/deb  Packages
+   kubeadm | 1.28.8-1.1 | https://pkgs.k8s.io/core:/stable:/v1.28/deb  Packages
+   kubeadm | 1.28.7-1.1 | https://pkgs.k8s.io/core:/stable:/v1.28/deb  Packages
+   kubeadm | 1.28.6-1.1 | https://pkgs.k8s.io/core:/stable:/v1.28/deb  Packages
    kubeadm | 1.28.5-1.1 | https://pkgs.k8s.io/core:/stable:/v1.28/deb  Packages
    kubeadm | 1.28.4-1.1 | https://pkgs.k8s.io/core:/stable:/v1.28/deb  Packages
    kubeadm | 1.28.3-1.1 | https://pkgs.k8s.io/core:/stable:/v1.28/deb  Packages
    kubeadm | 1.28.2-1.1 | https://pkgs.k8s.io/core:/stable:/v1.28/deb  Packages
    kubeadm | 1.28.1-1.1 | https://pkgs.k8s.io/core:/stable:/v1.28/deb  Packages
    kubeadm | 1.28.0-1.1 | https://pkgs.k8s.io/core:/stable:/v1.28/deb  Packages
+   kubeadm | 1.27.16-1.1 | https://pkgs.k8s.io/core:/stable:/v1.27/deb  Packages
+   kubeadm | 1.27.15-1.1 | https://pkgs.k8s.io/core:/stable:/v1.27/deb  Packages
+   kubeadm | 1.27.14-1.1 | https://pkgs.k8s.io/core:/stable:/v1.27/deb  Packages
+   kubeadm | 1.27.13-2.1 | https://pkgs.k8s.io/core:/stable:/v1.27/deb  Packages
+   kubeadm | 1.27.12-1.1 | https://pkgs.k8s.io/core:/stable:/v1.27/deb  Packages
+   kubeadm | 1.27.11-1.1 | https://pkgs.k8s.io/core:/stable:/v1.27/deb  Packages
+   kubeadm | 1.27.10-1.1 | https://pkgs.k8s.io/core:/stable:/v1.27/deb  Packages
    kubeadm | 1.27.9-1.1 | https://pkgs.k8s.io/core:/stable:/v1.27/deb  Packages
    kubeadm | 1.27.8-1.1 | https://pkgs.k8s.io/core:/stable:/v1.27/deb  Packages
    kubeadm | 1.27.7-1.1 | https://pkgs.k8s.io/core:/stable:/v1.27/deb  Packages
@@ -279,6 +355,9 @@ root@master1:/etc/apt/sources.list.d# apt-cache madison kubeadm
    kubeadm | 1.27.2-1.1 | https://pkgs.k8s.io/core:/stable:/v1.27/deb  Packages
    kubeadm | 1.27.1-1.1 | https://pkgs.k8s.io/core:/stable:/v1.27/deb  Packages
    kubeadm | 1.27.0-2.1 | https://pkgs.k8s.io/core:/stable:/v1.27/deb  Packages
+   kubeadm | 1.26.15-1.1 | https://pkgs.k8s.io/core:/stable:/v1.26/deb  Packages
+   kubeadm | 1.26.14-1.1 | https://pkgs.k8s.io/core:/stable:/v1.26/deb  Packages
+   kubeadm | 1.26.13-1.1 | https://pkgs.k8s.io/core:/stable:/v1.26/deb  Packages
    kubeadm | 1.26.12-1.1 | https://pkgs.k8s.io/core:/stable:/v1.26/deb  Packages
    kubeadm | 1.26.11-1.1 | https://pkgs.k8s.io/core:/stable:/v1.26/deb  Packages
    kubeadm | 1.26.10-1.1 | https://pkgs.k8s.io/core:/stable:/v1.26/deb  Packages

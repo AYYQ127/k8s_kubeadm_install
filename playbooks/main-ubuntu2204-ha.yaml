@@ -57,8 +57,7 @@
                 "data-root": "/data2/docker", 
                 "exec-opts": ["native.cgroupdriver=systemd"], 
                 "registry-mirrors": [
-                  "https://docker.mirrors.ustc.edu.cn",
-                  "http://hub-mirror.c.163.com"
+                  "https://docker.m.daocloud.io"
                 ],
                 "insecure-registries": ["{{ harbor_domain }}"],
                 "max-concurrent-downloads": 10,
@@ -560,7 +559,7 @@
               https://docs.tigera.io/calico/latest/getting-started/kubernetes/quickstart
 
         - name: 4.3:快速部署yaml
-          shell: kubectl create -f ../files/calico/tigera-operator_{{calico_version}}.yaml
+          shell: kubectl apply -f ../files/calico/tigera-operator_{{calico_version}}.yaml
 
         - name: 4.4:calico默认用的192.168.0.0作为pod的网络范围,初始化时我们使用的是{{pod_network}}所以需要修改
           lineinfile:

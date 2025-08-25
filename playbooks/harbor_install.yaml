@@ -41,10 +41,6 @@
         - name: set timezone
           timezone:
             name: Asia/Shanghai
-        - name: 安装中文包，支持显示中文
-          apt:
-            name: language-pack-zh-hans
-            state: present 
 
         - name: 安装docker.io
           apt:

@@ -20,7 +20,8 @@ certSANs:
 
 # 控制面板主机名，不需要修改，固定为[manage_node]
 # 如果需要高可用，请将这里改成，kubeadm时会用到control_plane_endpoint: ha-apiserveraddr:16443
-control_plane_endpoint: master1
+#control_plane_endpoint: master1
+control_plane_endpoint: ha-apiserveraddr:16443
 
 # kubeadm init使用，大版本号，不需要后缀
 kubernetes_version: v1.28.4
@@ -52,7 +53,7 @@ calico_version: v3.26.3
 ingress_version: v1.9.4
 
 # 有版本依赖，请参考README.md指引更换版本
-metrics_server_version: v0.6.4
+metrics_server_version: v0.8.0
 
 # 有版本依赖，请参考README.md指引更换版本
 kubernetes_dashboard_version: v3.0.0-alpha0
