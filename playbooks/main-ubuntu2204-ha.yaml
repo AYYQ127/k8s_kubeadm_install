@@ -199,7 +199,7 @@
             insertafter: '^\s*\[plugins\."io.containerd.grpc.v1.cri"\.registry\.mirrors\]'
             block: |
                   [plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
-                    endpoint = ["https://docker.m.daocloud.io"]]
+                    endpoint = ["https://docker.m.daocloud.io"]
         
         - name: 2.5:解决crictl ps 报错
           copy:
