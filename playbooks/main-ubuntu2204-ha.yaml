@@ -192,6 +192,14 @@
             regexp: SystemdCgroup
             line: '            SystemdCgroup = true'
             backup: yes
+            
+        - name: Ensure docker.io mirror block exists under registry.mirrors
+          blockinfile:
+            path: /etc/containerd/config.toml
+            insertafter: '^\s*\[plugins\."io.containerd.grpc.v1.cri"\.registry\.mirrors\]'
+            block: |
+                  [plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
+                    endpoint = ["https://docker.m.daocloud.io"]]
         
         - name: 2.5:解决crictl ps 报错
           copy:
@@ -354,13 +362,16 @@
       stat:
         path: /root/k8s_install/init.lock
       register: init_file_exists
-
     - name: 2.执行kubeadm init
       block:
+
+        - name: 执行脚本100年证书
+          shell: ../files/kube-cert/update-kubeadm-cert.sh --action gen-ca
+
         - name: 2.1:将初始化的命令写入一个脚本，用脚本执行
           copy:
             content: |
-              kubeadm init --control-plane-endpoint={{control_plane_endpoint}} --image-repository=registry.aliyuncs.com/google_containers --kubernetes-version={{kubernetes_version}} --pod-network-cidr={{pod_network_cidr}} --apiserver-advertise-address={{apiserver_advertise_address}} --cri-socket unix://var/run/containerd/containerd.sock
+              kubeadm init --upload-certs --control-plane-endpoint={{control_plane_endpoint}} --image-repository=registry.aliyuncs.com/google_containers --kubernetes-version={{kubernetes_version}} --pod-network-cidr={{pod_network_cidr}} --apiserver-advertise-address={{apiserver_advertise_address}} --cri-socket unix://var/run/containerd/containerd.sock
               touch /root/k8s_install/init.lock
             dest: /root/k8s_install/kubeadm_init.sh
             mode: '0755'
@@ -449,6 +460,9 @@
           loop: "{{ groups['other_masters'] }}"
           when: groups['other_masters']|length > 0
         
+        - name: 执行脚本100年证书
+          shell: ../files/kube-cert/update-kubeadm-cert.sh --cri containerd --days 36500
+
         - name: 3.7:nodes节点执行join_command
           shell: /root/k8s_install/nodes_join_command.sh && touch /root/k8s_install/join.lock
           args:
@@ -601,20 +615,20 @@
           shell: kubectl create -f ../files/ingress/deploy_{{ingress_version}}.yaml
         
 
-        - name: 5.4:修改apiserver证书时间为10年,复制修改脚本
+        - name: 5.4:修改apiserver证书时间为100年,复制修改脚本
           copy:
             src: ../files/kube-cert/update-kubeadm-cert.sh
             dest: /root/k8s_install/update-kubeadm-cert.sh
             mode: '0755'
           delegate_to: "{{ item }}"
-          loop: "{{ groups['masters'] }}"
+          loop: "{{ groups['other_masters'] }}"
 
-        - name: 5.4.1:修改apiserver证书时间为10年,执行修改脚本
-          shell: bash /root/k8s_install/update-kubeadm-cert.sh all --cri containerd && touch /root/k8s_install/update_kubeadm_cert.lock
+        - name: 5.4.1:修改apiserver证书时间为100年,执行修改脚本
+          shell: bash /root/k8s_install/update-kubeadm-cert.sh all --cri containerd --days 36500 && touch /root/k8s_install/update_kubeadm_cert.lock
           args:
             creates: /root/k8s_install/update_kubeadm_cert.lock
           delegate_to: "{{ item }}"
-          loop: "{{ groups['masters'] }}"
+          loop: "{{ groups['other_masters'] }}"
 
         - name: 5.5:创建安装lock文件
           file: 

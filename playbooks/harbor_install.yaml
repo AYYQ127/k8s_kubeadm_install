@@ -53,8 +53,7 @@
                 "data-root": "/data2/docker", 
                 "exec-opts": ["native.cgroupdriver=systemd"], 
                 "registry-mirrors": [
-                  "https://docker.mirrors.ustc.edu.cn",
-                  "http://hub-mirror.c.163.com"
+                  "https://docker.m.daocloud.io"
                 ],
                 "insecure-registries": ["{{ harbor_domain }}"],
                 "max-concurrent-downloads": 10,

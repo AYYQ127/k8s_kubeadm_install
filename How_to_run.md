@@ -166,25 +166,26 @@ root@node2:~# systemctl restart sshd.service
 https://help.mirrors.cernet.edu.cn/ubuntu/   
 选择系统版本20.04  
 ```bash
+# ubuntu:20.04
 ada@master1:~$ sudo su -
 root@master1:~# cat <<'EOF' > /etc/apt/sources.list
-# 默认注释了源码镜像以提高 apt update 速度，如有需要可自行取消注释
 deb https://mirrors.cernet.edu.cn/ubuntu/ focal main restricted universe multiverse
-# deb-src https://mirrors.cernet.edu.cn/ubuntu/ focal main restricted universe multiverse
 deb https://mirrors.cernet.edu.cn/ubuntu/ focal-updates main restricted universe multiverse
-# deb-src https://mirrors.cernet.edu.cn/ubuntu/ focal-updates main restricted universe multiverse
 deb https://mirrors.cernet.edu.cn/ubuntu/ focal-backports main restricted universe multiverse
-# deb-src https://mirrors.cernet.edu.cn/ubuntu/ focal-backports main restricted universe multiverse
-
-# deb https://mirrors.cernet.edu.cn/ubuntu/ focal-security main restricted universe multiverse
-# # deb-src https://mirrors.cernet.edu.cn/ubuntu/ focal-security main restricted universe multiverse
-
 deb http://security.ubuntu.com/ubuntu/ focal-security main restricted universe multiverse
-# deb-src http://security.ubuntu.com/ubuntu/ focal-security main restricted universe multiverse
 
-# 预发布软件源，不建议启用
-# deb https://mirrors.cernet.edu.cn/ubuntu/ focal-proposed main restricted universe multiverse
-# # deb-src https://mirrors.cernet.edu.cn/ubuntu/ focal-proposed main restricted universe multiverse
+EOF
+root@master1:~# apt update
+
+# ubuntu:24.04
+ada@master1:~$ sudo su -
+root@master1:~# cat <<'EOF' > /etc/apt/sources.list.d/ubuntu.sources
+Types: deb
+URIs: https://mirrors.cernet.edu.cn/ubuntu
+Suites: noble noble-updates noble-backports
+Components: main restricted universe multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+
 EOF
 root@master1:~# apt update
 # 其他节点类似

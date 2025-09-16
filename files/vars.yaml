@@ -3,15 +3,15 @@ NTP: 192.168.152.200
 
 # 用于高可用的主机列表ip
 all_masters:
-  - 172.16.1.35
-  - 172.16.1.36
-  - 172.16.1.37
+  - 192.168.152.200
+  - 192.168.152.201
+  - 192.168.152.202
 
 # certSANs高可用dns白名单配置
 certSANs:
-  - 172.16.1.35
-  - 172.16.1.36
-  - 172.16.1.37
+  - 192.168.152.200
+  - 192.168.152.201
+  - 192.168.152.202
   - 127.0.0.1
   - master1
   - master2
@@ -24,11 +24,11 @@ certSANs:
 control_plane_endpoint: ha-apiserveraddr:16443
 
 # kubeadm init使用，大版本号，不需要后缀
-kubernetes_version: v1.28.4
+kubernetes_version: v1.32.6
 
 # 详细版本请看README.md
 # apt版本修改这个
-kube_3tools_version: 1.28.4-1.1
+kube_3tools_version: 1.32.6-1.1
 # yum版本修改这个
 kube_3tools_version_yum: 1.28.4-150500.1.1
 
@@ -41,16 +41,16 @@ apiserver_advertise_address: 192.168.152.200
 pod_network: 10.244.0.0/16
 
 # pause所使用镜像版本，需要替换阿里源，官方源国内无法拉取
-sandbox_image: pause:3.9
+sandbox_image: pause:3.10
 
 # 有版本依赖，请参考README.md指引更换版本
-calico_version: v3.26.3
+calico_version: v3.30.0
 # 如果在微软云部署，需要修改CrossSubnet为Always
 # kubectl get ippools -o yaml 将CrossSubnet改为Always
 # kubectl -n calico-system rollout restart ds calico-node。
 
 # 有版本依赖，请参考README.md指引更换版本
-ingress_version: v1.9.4
+ingress_version: v1.12.3
 
 # 有版本依赖，请参考README.md指引更换版本
 metrics_server_version: v0.8.0
@@ -67,12 +67,12 @@ dashboard_nodePoart: 30443
 cert_manager_version: v1.13.3
 
 # 有版本依赖，请参考README.md指引更换版本
-kube_prometheus_version: 0.13.0
+kube_prometheus_version: 0.15.0
 grafana_host: grafana.example.local
 
 # harbor域名,私有仓库域名
 harbor_domain: myharbor.com
-harbor_ip: 192.168.152.220
+harbor_ip: 192.168.152.200
 # 使用哪种方式访问harbor(此处默认使用password，如果使用secert，需要在每个资源文件中添加参数imagePullSecrets,详情参考仓库根目录readme)
 passord_or_secert: password
 # 如果修改了harbor的默认密码，需要修改/etc/containerd/config.toml: password = "yourpassword"
