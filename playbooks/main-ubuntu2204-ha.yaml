@@ -366,7 +366,7 @@
       block:
 
         - name: 执行脚本100年证书
-          shell: ../files/kube-cert/update-kubeadm-cert.sh --action gen-ca
+          shell: bash ../files/kube-cert/update-kubeadm-cert.sh --action gen-ca
 
         - name: 2.1:将初始化的命令写入一个脚本，用脚本执行
           copy:
