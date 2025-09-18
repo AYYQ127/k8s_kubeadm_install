@@ -278,7 +278,7 @@
           delegate_to: "{{ item }}"
           loop: "{{ groups['manage_node'] }}"
         
-        - name: 3.11:请确认你安装的版本号为v1.28.4,v1.29.6,v1.30.2其中之一,若不是,请自行解决镜像问题。
+        - name: 3.11:请确认你安装的版本号为v1.28.4,v1.29.6,v1.30.2其中之一,若不是,请自行解决镜像问题,请设置https://docker.m.daocloud.io
           pause:
             seconds: 15 
         - name: 3.11.1:导入{{kubernetes_version}}镜像第一步,复制脚本
@@ -404,31 +404,40 @@
     - name: 3.生成添加命令
       block:
         - name: 3.1:重新生成join命令
-          shell: kubeadm token create --print-join-command 
+          shell: kubeadm token create --print-join-command
           register: join_command
 
         - name: 如果没有证书密钥文件则生成并保存
-          shell: kubeadm init phase upload-certs --upload-certs 2>&1 | tail -n 1 > /root/k8s_install/certificate_key.txt
+          shell: kubeadm init phase upload-certs --upload-certs 2>&1 | tail -n 1 | tee /root/k8s_install/certificate_key.txt
+          register: certificate_key_gen
           when: not certificate_key_file_exists.stat.exists
-    
-        - name: 读取证书密钥
+
+        - name: 读取证书密钥（如果已有文件）
           command: cat /root/k8s_install/certificate_key.txt
-          register: certificate_key
+          register: certificate_key_file
           when: certificate_key_file_exists.stat.exists
 
+        - name: 设置最终证书密钥变量
+          set_fact:
+            certificate_key: >-
+              {{ (certificate_key_gen.stdout if (certificate_key_gen is defined and certificate_key_gen.stdout is defined) 
+                else (certificate_key_file.stdout if (certificate_key_file is defined and certificate_key_file.stdout is defined) 
+                else '')) }}
+
+        
         - name: 将nodes节点join命令写入脚本
           copy:
             content: |
               {{ item }}
             dest: /root/k8s_install/nodes_join_command.sh
             mode: '0755'
-          with_items: "{{ join_command.stdout_lines }}" 
+          with_items: "{{ join_command.stdout_lines }}"
           when: join_command.stdout_lines is defined and join_command.stdout_lines|length > 0
 
         - name: 将other_masters节点join命令写入脚本
           copy:
             content: |
-              {{ item }} --control-plane --certificate-key {{ certificate_key.stdout }}
+              {{ item }} --control-plane --certificate-key {{ certificate_key }}
             dest: /root/k8s_install/control_plane_join_command.sh
             mode: '0755'
           with_items: "{{ join_command.stdout_lines }}"
@@ -437,9 +446,11 @@
                 join_command.stdout_lines|length > 0
 
         - name: 创建lock文件
-          file: 
+          file:
             path: /root/k8s_install/join_command.lock
             state: touch
+
+
       
     - name: 3.复制join添加命令到节点
       block: 
@@ -461,7 +472,9 @@
           when: groups['other_masters']|length > 0
         
         - name: 执行脚本100年证书
-          shell: ../files/kube-cert/update-kubeadm-cert.sh --cri containerd --days 36500
+          shell: bash ../files/kube-cert/update-kubeadm-cert.sh --cri containerd --days 36500
+          args:
+            creates: /root/k8s_install/update-kubeadm-cert.lock
 
         - name: 3.7:nodes节点执行join_command
           shell: /root/k8s_install/nodes_join_command.sh && touch /root/k8s_install/join.lock
@@ -479,9 +492,9 @@
           when: groups['other_masters']|length > 0
 
         - name: 3.9:为nodes节点添加角色
-          shell: kubectl label nodes "{{ item }}" node-role.kubernetes.io/node=node
+          shell: kubectl label nodes "{{ item }}" node-role.kubernetes.io/node=node --kubeconfig=/etc/kubernetes/admin.conf && touch /root/k8s_install/"{{ item }}"___label.lock && sleep 5
           args:
-            creates: /root/k8s_install/label.lock
+            creates: /root/k8s_install/"{{ item }}"___label.lock
           loop: "{{ groups['nodes'] }}"
         
         - name: 3.10:删除污点
@@ -573,7 +586,18 @@
               https://docs.tigera.io/calico/latest/getting-started/kubernetes/quickstart
 
         - name: 4.3:快速部署yaml
-          shell: kubectl apply -f ../files/calico/tigera-operator_{{calico_version}}.yaml
+          shell: kubectl apply -f ../files/calico/tigera-operator_{{calico_version}}.yaml 
+          args:
+            creates: /root/k8s_install/calico_operator.lock
+          register: calico_operator
+
+        - name: 等待 Calico CRDs 创建完成
+          shell: |
+            kubectl wait --for=condition=Established crd/installations.operator.tigera.io --timeout=180s
+          retries: 5
+          delay: 10
+          register: wait_crds
+          until: wait_crds.rc == 0
 
         - name: 4.4:calico默认用的192.168.0.0作为pod的网络范围,初始化时我们使用的是{{pod_network}}所以需要修改
           lineinfile:
@@ -583,12 +607,14 @@
             backup: yes
 
         - name: 4.5:创建必要的自定义资源
-          shell: kubectl create -f ../files/calico/custom-resources_{{calico_version}}.yaml
+          shell: kubectl apply -f ../files/calico/custom-resources_{{calico_version}}.yaml --validate=false
+          when: calico_operator is succeeded
 
         - name: 创建安装calico.lock文件
           file: 
             path: /root/k8s_install/calico.lock
-            state: touch   
+            state: touch
+
 
       when: not calico_file_exists.stat.exists
 
