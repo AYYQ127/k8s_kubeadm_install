@@ -691,6 +691,10 @@ harbor | SUCCESS => {
 root@master1:~/k8s_kubeadm_install# ansible all -m copy -a "src=/etc/hosts dest=/etc/hosts"
 root@master1:~/k8s_kubeadm_install# ansible harbor -m copy -a "src=/etc/apt/sources.list dest=/etc/apt/sources.list"
 root@master1:~/k8s_kubeadm_install# ansible harbor -m apt -a "update_cache=yes"
+
+# ubuntu24.04
+root@master1:~/k8s_kubeadm_install# ansible harbor -m copy -a "src=/etc/apt/sources.list.d/ubuntu.sources dest=/etc/apt/sources.list.d/ubuntu.sources"
+root@master1:~/k8s_kubeadm_install# ansible harbor -m apt -a "update_cache=yes"
 ```
 
 5. 执行安装
