@@ -28,10 +28,11 @@ spec:
       automountServiceAccountToken: true
       containers:
       - args:
-        - --host=127.0.0.1
+        - --host=0.0.0.0
         - --port=8081
-        - --telemetry-host=127.0.0.1
+        - --telemetry-host=0.0.0.0
         - --telemetry-port=8082
+        - --resources=pods
         image: docker.io/bitnami/kube-state-metrics:2.15.0
         name: kube-state-metrics
         resources:

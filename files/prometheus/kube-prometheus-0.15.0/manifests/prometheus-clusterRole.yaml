@@ -9,14 +9,28 @@ metadata:
     app.kubernetes.io/version: 3.4.0
   name: prometheus-k8s
 rules:
-- apiGroups:
-  - ""
+- apiGroups: [""]
   resources:
+  - nodes
   - nodes/metrics
-  verbs:
-  - get
+  - services
+  - endpoints
+  - pods
+  - namespaces
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["networking.k8s.io"]
+  resources:
+  - ingresses
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources:
+  - configmaps
+  verbs: ["get"]
+- apiGroups: [""]
+  resources:
+  - nodes/proxy
+  verbs: ["get"]
 - nonResourceURLs:
-  - /metrics
-  - /metrics/slis
-  verbs:
-  - get
+  - "/metrics"
+  - "/metrics/slis"
+  verbs: ["get"]
