@@ -181,8 +181,22 @@ root@master1:~# apt update
 ada@master1:~$ sudo su -
 root@master1:~# cat <<'EOF' > /etc/apt/sources.list.d/ubuntu.sources
 Types: deb
-URIs: https://mirrors.cernet.edu.cn/ubuntu
+URIs: https://mirrors.tuna.tsinghua.edu.cn/ubuntu
 Suites: noble noble-updates noble-backports
+Components: main restricted universe multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+
+# 默认注释了源码镜像以提高 apt update 速度，如有需要可自行取消注释
+# Types: deb-src
+# URIs: https://mirrors.tuna.tsinghua.edu.cn/ubuntu
+# Suites: noble noble-updates noble-backports
+# Components: main restricted universe multiverse
+# Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+
+# 以下安全更新软件源为官方源配置
+Types: deb
+URIs: http://security.ubuntu.com/ubuntu/
+Suites: noble-security
 Components: main restricted universe multiverse
 Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
 
@@ -194,7 +208,13 @@ root@master1:~# apt update
 ### 安装ansible(在主节点安装)
 ```bash
 root@master1:~# apt install ansible -y
+root@master1:~# vim /etc/ansible/ansible.cfg
+forks          = 50
 root@master1:~# mkdir -p /etc/ansible/
+# 解决ansible和jinja2的版本兼容问题
+root@master1:~# pip3 uninstall jinja2 -y
+root@master1:~# pip3 install jinja2==3.0.3
+root@master1:~# python3 -c "from jinja2.filters import environmentfilter;print('ok')"
 ```
 
 ### 复制整个k8s_kubeadm_install到主节点任意位置
@@ -371,8 +391,33 @@ cert_manager_version: v1.13.3
 # 默认只安装集群基础功能
 ada@master1:~$ sudo su - 
 root@master1:~$ cd k8s_kubeadm_install
-root@master1:~/k8s_kubeadm_install# ansible-playbook playbooks/main.yaml
+#！！！！！注意！！！！！
+# 如果是云环境，需要修改files/calico/custom-resources_{version}.yaml中的encapsulation: VXLANCrossSubnet成VXLAN，否则会出现pod跨节点无法访问
+# 并在安装完以后确认
+root@master1:~/k8syaml/mysql50# kubectl get ippool default-ipv4-ippool -o yaml
+apiVersion: crd.projectcalico.org/v1
+kind: IPPool
+metadata:
+  annotations:
+    projectcalico.org/metadata: '{"generation":2,"creationTimestamp":"2026-05-18T07:12:00Z","labels":{"app.kubernetes.io/managed-by":"tigera-operator"},"managedFields":[{"manager":"operator","operation":"Update","apiVersion":"projectcalico.org/v3","time":"2026-05-20T01:11:19Z","fieldsType":"FieldsV1","fieldsV1":{"f:spec":{"f:vxlanMode":{}}}}]}'
+  creationTimestamp: "2026-05-18T07:12:00Z"
+  generation: 5
+  name: default-ipv4-ippool
+  resourceVersion: "627317"
+  uid: 6db3199e-e778-4b5e-8f95-7128526dc15a
+spec:
+  allowedUses:
+  - Workload
+  - Tunnel
+  assignmentMode: Automatic
+  blockSize: 26
+  cidr: 10.244.0.0/16
+  ipipMode: Never
+  natOutgoing: true
+  nodeSelector: all()
+  vxlanMode: CrossSubnet   （如果这里是这个需要修改成Always，并执行kubectl -n calico-system rollout restart ds calico-node）
 
+root@master1:~/k8s_kubeadm_install# ansible-playbook playbooks/main.yaml
 PLAY [第一步初始化系统] ***********************************************************************************************************************************************************************************************
 ...
 ...
@@ -596,6 +641,7 @@ kubernetes-dashboard  nginx  k8s.dashboard.local  192.168.181.133,192.168.181.13
 ### prometheus
 ```bash 
 # prometheus
+# 执行安装后需要先改grafana的limits和数据的持久化
 root@master1:~/k8s_kubeadm_install# ansible-playbook playbooks/main.yaml  -t prometheus
 
 PLAY [创建prometheus资源对象] **************************************************************************************************************************************************

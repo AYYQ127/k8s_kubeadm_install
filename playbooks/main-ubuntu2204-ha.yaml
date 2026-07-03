@@ -45,6 +45,14 @@
         - name: 3.5:set timezone
           timezone:
             name: Asia/Shanghai
+        
+        - name: 3.6:安装指定版本 containerd 1.7.28 并锁定,如果报错执行apt-cache madison containerd查看对应版本
+          apt:
+            name: containerd=1.7.28-0ubuntu1~24.04.2
+            state: present
+            force_apt_get: yes
+        - name: 锁定 containerd 防止自动升级  
+          shell: apt-mark hold containerd
 
         - name: 3.7:安装docker.io
           apt:
@@ -663,10 +671,15 @@
 
       when: not ingress_file_exists.stat.exists
 
-    - name: 6.如果成功
+    - name: 6.如果成功  
       debug:
         msg: |
           你不会看到任何错误,可以执行../files下的test-ingress.yaml验证网络:kubectl apply -f files/test-ingress.yaml, kubectl get pod,svc,ing
+    
+    - name: 7.最后确认是否已经全部锁定  containerd、kubelet、kubeadm、kubectl
+      debug:
+        msg: |
+          ansible k8s -m shell -a "apt-mark showhold"
 
 - name: 第五步[选装] 安装metrics
   import_playbook: ./metrics_server_install.yaml
