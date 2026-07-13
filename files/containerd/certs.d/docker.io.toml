@@ -1,0 +1,4 @@
+server = "https://registry-1.docker.io"
+
+[host."https://docker.m.daocloud.io"]
+  capabilities = ["pull", "resolve"]

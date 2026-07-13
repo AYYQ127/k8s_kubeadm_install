@@ -1,447 +1,215 @@
-### 演示视频
-https://www.bilibili.com/video/BV1Sk4y1D7b6/
+# k8s_kubeadm_install
 
-### 系统环境
-1. ubuntu20.04
-2. ubuntu22.04
-3. centos7.9
+> 使用 Ansible + kubeadm 一键部署 Kubernetes 集群，支持 Ubuntu / CentOS，集成 Calico、Ingress、Prometheus、Harbor 等常用组件。
 
-### 区别一下
-ubuntu系统请参考How_to_run.md  
-centos系统请参考How_to_run_redhat_release.md
+[![Platform](https://img.shields.io/badge/platform-Ubuntu%2020.04%20%7C%2022.04%20%7C%2024.04%20%7C%20CentOS%207.9-orange)](#)
+[![K8s](https://img.shields.io/badge/k8s-v1.25--v1.36-blue)](#)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-
-### 说明
-1. files/calico/custom-resources.yaml && files/calico/tigera-operator.yaml(calico)
-```bash
-# calico官网地址，查看对应版本
-https://docs.tigera.io/calico/latest/about
-https://docs.tigera.io/calico/latest/getting-started/kubernetes/requirements#kubernetes-requirements
-
-# 快速部署
-https://docs.tigera.io/calico/latest/getting-started/kubernetes/quickstart
-
-# 需要提前下载对应版本tigera-operator.yaml到files目录，其他操作不用做
-https://raw.githubusercontent.com/projectcalico/calico/v3.28.0/manifests/tigera-operator.yaml
-
-# 需要提前下载对应版本custom-resources.yaml到files目录，其他操作不用做
-https://raw.githubusercontent.com/projectcalico/calico/v3.28.0/manifests/custom-resources.yaml
-
-# 将下载的文件放至files/calico,并按"文件名_version"格式命名
-```
-
-2. files/ingress/deploy.yaml(Ingress)
-```bash
-# 查看支持版本
-https://github.com/kubernetes/ingress-nginx/blob/main/README.md#readme
-
-version=v1.10.1
-
-# 快速部署
-https://kubernetes.github.io/ingress-nginx/deploy/#quick-start
-
-# 单独下载deploy.yaml文件
-wget https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-${version}/deploy/static/provider/baremetal/deploy.yaml
-
-
-# deploy.yaml源码文件包下载
-
-https://github.com/kubernetes/ingress-nginx/releases
-wget https://github.com/kubernetes/ingress-nginx/archive/refs/tags/controller-${version}.tar.gz
-tar -xf controller-${version}.tar.gz
-
-vim ingress-nginx-controller-v1.9.4/deploy/static/provider/baremetal/deploy.yaml
-
-# 需要提前下载对应版本deploy.yaml到files目录，手动修改镜像名称，有三处(v1.9.4,其余版本在这附近)
-445        image: registry.cn-hangzhou.aliyuncs.com/google_containers/nginx-ingress-controller:v1.9.4
-542        image: registry.cn-hangzhou.aliyuncs.com/google_containers/kube-webhook-certgen:v20231011-8b53cabe0
-591        image: registry.cn-hangzhou.aliyuncs.com/google_containers/kube-webhook-certgen:v20231011-8b53cabe0 
-
-把 kind: Deployment 改为 kind: DaemonSet 模式，这样每台node上都有 
-ingress-nginx-controller pod 副本。 
-使用hostNetwork: true，默认 ingress-nginx 随机提供 nodeport 端口，
-开启 hostNetwork 启用80、443端口。
-如果不关心 ingressClass 或者很多没有 ingressClass 配置的 ingress 对象， 
-添加参数 --watch-ingress-without-class=true
-
-# 位置为v1.9.4，其余版本行号在这附近
-391 kind: DaemonSet
-409  #strategy:
-410    #rollingUpdate:
-411      #maxUnavailable: 1
-412    #type: RollingUpdate
-422       hostNetwork: true
-433         - --watch-ingress-without-class=true
-
-# 将下载的文件放至files/ingress,并按"文件名_version"格式命名
-```
-
-3. files/metrics/components.yaml(metrics-server)
-```bash
-# 查看支持版本
-https://github.com/kubernetes-sigs/metrics-server?tab=readme-ov-file#compatibility-matrix
-
-
-wget https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.6.4/components.yaml
-wget https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.7.0/components.yaml
-
-# 目前不管你是用v0.6.4还是v0.7.0都是可以的
-# 0.7.x	metrics.k8s.io/v1beta1	1.19+
-# 0.6.x	metrics.k8s.io/v1beta1	1.19+
-```
-
-4. files/dashboard/kubernetes-dashboard.yaml(dashboard)
-```bash
-# 参考
-https://blog.frognew.com/2023/12/kubeadm-install-kubernetes-1.29.html
-
-# 查看版本对应关系
-https://github.com/kubernetes/dashboard/releases
-
-# 目前官方没有发布支持最新的v1.28和v1.29版本的支持，只更新到v1.27,我测试v1.28版本也是没有问题的，参考文档使用的v1.29也是可以的。
-# 如果版本安装版本为v3.0.0-alpha0，
-wget https://raw.githubusercontent.com/kubernetes/dashboard/v3.0.0-alpha0/charts/kubernetes-dashboard.yaml
-258    - host: k8s.dashboard.example    # 此处定义部署完成后，访问的域名，通过vars.yaml修改
-
-# 从 Kubernetes Dashboard v3 版本开始，底层架构已经发生了变化，需要进行全新的安装。请先删除之前的安装。
-#Kubernetes Dashboard 现在默认使用 cert-manager 和 nginx-ingress-controller 来正常工作。如果您想使用基于清单的安装路径，请确保在集群中已安装它们。如果需要，基于 Helm 的方法可以自动安装所有所需的依赖项。
-
-# ingress在集群初始化时已经安装
-# cert-manager查看后面说明
-
-
-# 如果安装版本为v2.7.0，则不需要cert-manager 和 nginx-ingress-controller，但是需要修改yaml文件的Service.kubernetes-dashboard.spec.ports
-wget https://raw.githubusercontent.com/kubernetes/dashboard/v2.7.0/aio/deploy/recommended.yaml
+- [演示视频 (B站)](https://www.bilibili.com/video/BV1Sk4y1D7b6/)
 
 ---
-kind: Service
-apiVersion: v1
-metadata:
-  labels:
-    k8s-app: kubernetes-dashboard
-  name: kubernetes-dashboard
-  namespace: kubernetes-dashboard
-spec:
-  ports:
-    - port: 443
-      targetPort: 8443
-      nodePoart: 30443    # 定义nodePort访问端口
-  selector:
-    k8s-app: kubernetes-dashboard
-  type: NodePort          # 设置端口类型，默认为ClusterIP
+
+## 目录
+
+- [特性](#特性)
+- [快速开始](#快速开始)
+- [项目结构](#项目结构)
+- [支持的组件](#支持的组件)
+- [版本兼容性](#版本兼容性)
+- [文档索引](#文档索引)
+
 ---
 
+## 特性
 
-# 登录可以使用两种方式登录，一种是创建的token，使用本脚本创建后的token在master1的/root/k8s_install/dashboard_token文件中
-# 另一种时kubeconfig file，配置参考链接https://kubernetes.io/zh-cn/docs/tasks/access-application-cluster/configure-access-multiple-clusters/
-```
+- **一键部署**: 执行一条 `ansible-playbook` 命令完成集群初始化（系统优化 → 安装组件 → 初始化集群 → 加入节点）
+- **多平台**: Ubuntu 20.04 / 22.04 / 24.04 (APT) 和 CentOS 7.9 (YUM)
+- **多版本**: 支持 Kubernetes v1.25 ~ v1.36
+- **高可用**: 内置多 master + OpenResty 负载均衡方案
+- **离线安装**: 支持离线镜像导入，适合无外网环境
+- **幂等性**: 通过 lock 文件机制，中断后可安全重跑
+- **可选组件**: 可按需安装 Metrics Server、Prometheus/Grafana、Harbor 私有仓库
+- **证书续期**: 内置证书续期脚本，可将 1 年有效期延长至 10 年
 
-5. files/cert-manager/cert-manager.yaml(cert-manager)
-```bash
-# 查看版本支持
-https://cert-manager.io/docs/releases/
-https://github.com/cert-manager/cert-manager/releases
+---
 
+## 快速开始
 
-wget https://github.com/cert-manager/cert-manager/releases/download/v1.13.3/cert-manager.yaml
+### 1. 准备节点
 
-# will be released on January 31 2024.
-wget https://github.com/cert-manager/cert-manager/releases/download/v1.14.0/cert-manager.yaml
-
-
-```
-6. files/prometheus/ (prometheus)
-https://github.com/prometheus-operator/kube-prometheus
-
-| kube-prometheus stack                                                                      | Kubernetes 1.22 | Kubernetes 1.23 | Kubernetes 1.24 | Kubernetes 1.25 | Kubernetes 1.26 | Kubernetes 1.27 | Kubernetes 1.28 |
-|--------------------------------------------------------------------------------------------|-----------------|-----------------|-----------------|-----------------|-----------------|-----------------|-----------------|
-| [`release-0.10`](https://github.com/prometheus-operator/kube-prometheus/tree/release-0.10) | ✔               | ✔               | ✗               | ✗               | x               | x               | x               |
-| [`release-0.11`](https://github.com/prometheus-operator/kube-prometheus/tree/release-0.11) | ✗               | ✔               | ✔               | ✗               | x               | x               | x               |
-| [`release-0.12`](https://github.com/prometheus-operator/kube-prometheus/tree/release-0.12) | ✗               | ✗               | ✔               | ✔               | x               | x               | x               |
-| [`release-0.13`](https://github.com/prometheus-operator/kube-prometheus/tree/release-0.13) | ✗               | ✗               | ✗               | x               | ✔               | ✔               | ✔               |
-| [`release-0.14`](https://github.com/prometheus-operator/kube-prometheus/tree/release-0.14) | x               | x               | ✔               | ✔               | ✔               | x               | x               |
-| [`release-0.15`](https://github.com/prometheus-operator/kube-prometheus/tree/release-0.15) | x               | x               | x               | x               | ✔               | ✔               | ✔               |
+至少 1 台 master（推荐 3 台做 HA），若干台 worker。所有节点需满足：
+- Ubuntu 20.04/22.04/24.04 或 CentOS 7.9
+- 2 CPU / 2GB RAM 以上
+- 网络互通，能访问 `pkgs.k8s.io` 和 `registry.aliyuncs.com`
 
 ```bash
-# 下载对应版本yaml文件
-https://github.com/prometheus-operator/kube-prometheus/releases
-
-# 注意事项！！！在0.11版本后添加了NetworkPolicies用于网络控制
-release-0.11 / 2022-06-15
-[ENHANCEMENT] Adds NetworkPolicies to all components of Kube-prometheus #1650
-# 所以使用常规的NodePort方式是无法访问的，害得我找了两天问题究竟出在哪里
-# 可能需要修改 grafana-networkPolicy.yaml 中的Ingress策略，我不知道怎么改
-# 如果有知道怎么改的可以交流下
-
-# 解决办法，如果你要使用NodePort方式访问，你可以删除这grafana-networkPolicy.yaml，
-# 再使用自动playboook执行
-# 本项目为了减少操作步骤，采用Ingress的方式访问，无需删除文件
-# 第二次踩坑，发现ingress也需要删除文件grafana-networkPolicy.yaml 
-
-
-# 替换镜像
-# 原始镜像经过测试无法拉取，需要修改两个文件的镜像地址，注意对应版本，
-manifests/prometheusAdapter-deployment.yaml
-41        image: docker.io/developerxu/prometheus-adapter:v0.11.1
-manifests/kubeStateMetrics-deployment.yaml
-35        image: docker.io/bitnami/kube-state-metrics:2.9.2
-
-manifests/prometheusAdapter-deployment.yaml
-40        image: docker.io/developerxu/prometheus-adapter:v0.10.0
-manifests/kubeStateMetrics-deployment.yaml
-35        image: docker.io/bitnami/kube-state-metrics:2.7.0
-
-# 0.15.0版本
-manifests/prometheusAdapter-deployment.yaml
-41        image: docker.io/v5cn/prometheus-adapter:v0.12.0
-manifests/kubeStateMetrics-deployment.yaml
-35        image: docker.io/bitnami/kube-state-metrics:2.15.0
-
-# 如果需要其他版本，需要按照相同的命名方式将release文件夹下载后解压，只保留manifests文件夹即可
-
-
-
-# nodePort方式部署参考(注意删除grafana-networkPolicy.yaml)
-https://blog.csdn.net/m0_51510236/article/details/132601350
+# 设置主机名（所有节点）
+hostnamectl set-hostname master1   # 按实际命名
 ```
 
-7. files/harbor/ (harbor)
+### 2. 在 master1 上安装 Ansible 并克隆项目
+
 ```bash
-#下载docker-compose,下载后放在files/harbor/,其他不用操作
-https://github.com/docker/compose/releases/
-# 安装包很大，这里就不上传github了，自行下载
-https://github.com/docker/compose/releases/download/${version}/docker-compose-linux-x86_64
-#下载安装harbor离线包
-https://github.com/goharbor/harbor/releases
-# 安装包很大，这里就不上传github了，自行下载
-https://github.com/goharbor/harbor/releases/download/${version}/harbor-offline-installer-${version}.tgz
-# 放在files/harbor/，删除版本编号harbor-offline-installer.tgz
-```
-- harbor有两种配置方式，其实就是修改containerd的配置文件
-1. 通过账号密码进行认证  
-  - /etc/containerd/config.toml
-```yaml
-    [plugins."io.containerd.grpc.v1.cri".registry]
-      [plugins."io.containerd.grpc.v1.cri".registry.configs]
-        [plugins."io.containerd.grpc.v1.cri".registry.configs."{{ harbor_domain }}".tls]
-          insecure_skip_verify = true
-        [plugins."io.containerd.grpc.v1.cri".registry.configs."{{ harbor_domain }}".auth]
-          username = "admin"
-          password = "Harbor12345"
-      [plugins."io.containerd.grpc.v1.cri".registry.mirrors]
-        [plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
-          endpoint = ["https://{{ harbor_domain }}"]
-```
-2. 通过kubectl创建secert
-```bash
-kubectl create secret docker-registry harbor-auth \
-        --docker-server=https://myharbor.com \
-        --docker-username=admin \
-        --docker-password=Harbor12345 -n default
-```
-  - /etc/containerd/config.toml  
-```yaml
-    [plugins."io.containerd.grpc.v1.cri".registry]
-      [plugins."io.containerd.grpc.v1.cri".registry.configs]
-        [plugins."io.containerd.grpc.v1.cri".registry.configs."{{ harbor_domain }}".tls]
-          insecure_skip_verify = true
-      [plugins."io.containerd.grpc.v1.cri".registry.mirrors]
-        [plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
-          endpoint = ["https://{{ harbor_domain }}"]
-```
-   - 拉镜像时需要配置kubectl创建的secret
-```yaml
-    spec:
-      containers:
-        - name: nginx
-          image: myharbor.com/test/nginx:latest
-          ports:
-            - containerPort: 80
-      imagePullSecrets:
-        - name: harbor-auth
+apt install ansible -y             # CentOS: yum install ansible -y
+git clone https://github.com/AYYQ127/k8s_kubeadm_install.git
+cd k8s_kubeadm_install
 ```
 
-### 官方源目前的版本
-apt版本
+### 3. 配置
+
+修改三个文件：
+
+| 文件 | 修改内容 |
+|---|---|
+| `files/ansible/hosts` | 将 `master1/node1` 等主机名替换为实际节点名 |
+| `files/vars.yaml` | 修改 `kubernetes_version`、IP 地址等关键变量 |
+| `/etc/hosts` | 添加所有节点的 IP-主机名映射 |
+
 ```bash
-# 重新生成添加k8s官方安装源的GPG 密钥，如果过期需要重新生成gpg
-# curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.28/deb/Release.key | sudo gpg --dearmor -o /etc/apt/kubernetes-apt-keyring.gpg
-root@master1:/etc/apt/sources.list.d# apt-cache madison kubeadm
-   kubeadm | 1.33.3-1.1 | https://pkgs.k8s.io/core:/stable:/v1.33/deb  Packages
-   kubeadm | 1.33.2-1.1 | https://pkgs.k8s.io/core:/stable:/v1.33/deb  Packages
-   kubeadm | 1.33.1-1.1 | https://pkgs.k8s.io/core:/stable:/v1.33/deb  Packages
-   kubeadm | 1.33.0-1.1 | https://pkgs.k8s.io/core:/stable:/v1.33/deb  Packages
-   kubeadm | 1.32.7-1.1 | https://pkgs.k8s.io/core:/stable:/v1.32/deb  Packages
-   kubeadm | 1.32.6-1.1 | https://pkgs.k8s.io/core:/stable:/v1.32/deb  Packages
-   kubeadm | 1.32.5-1.1 | https://pkgs.k8s.io/core:/stable:/v1.32/deb  Packages
-   kubeadm | 1.32.4-1.1 | https://pkgs.k8s.io/core:/stable:/v1.32/deb  Packages
-   kubeadm | 1.32.3-1.1 | https://pkgs.k8s.io/core:/stable:/v1.32/deb  Packages
-   kubeadm | 1.32.2-1.1 | https://pkgs.k8s.io/core:/stable:/v1.32/deb  Packages
-   kubeadm | 1.32.1-1.1 | https://pkgs.k8s.io/core:/stable:/v1.32/deb  Packages
-   kubeadm | 1.32.0-1.1 | https://pkgs.k8s.io/core:/stable:/v1.32/deb  Packages
-   kubeadm | 1.31.11-1.1 | https://pkgs.k8s.io/core:/stable:/v1.31/deb  Packages
-   kubeadm | 1.31.10-1.1 | https://pkgs.k8s.io/core:/stable:/v1.31/deb  Packages
-   kubeadm | 1.31.9-1.1 | https://pkgs.k8s.io/core:/stable:/v1.31/deb  Packages
-   kubeadm | 1.31.8-1.1 | https://pkgs.k8s.io/core:/stable:/v1.31/deb  Packages
-   kubeadm | 1.31.7-1.1 | https://pkgs.k8s.io/core:/stable:/v1.31/deb  Packages
-   kubeadm | 1.31.6-1.1 | https://pkgs.k8s.io/core:/stable:/v1.31/deb  Packages
-   kubeadm | 1.31.5-1.1 | https://pkgs.k8s.io/core:/stable:/v1.31/deb  Packages
-   kubeadm | 1.31.4-1.1 | https://pkgs.k8s.io/core:/stable:/v1.31/deb  Packages
-   kubeadm | 1.31.3-1.1 | https://pkgs.k8s.io/core:/stable:/v1.31/deb  Packages
-   kubeadm | 1.31.2-1.1 | https://pkgs.k8s.io/core:/stable:/v1.31/deb  Packages
-   kubeadm | 1.31.1-1.1 | https://pkgs.k8s.io/core:/stable:/v1.31/deb  Packages
-   kubeadm | 1.31.0-1.1 | https://pkgs.k8s.io/core:/stable:/v1.31/deb  Packages
-   kubeadm | 1.30.14-1.1 | https://pkgs.k8s.io/core:/stable:/v1.30/deb  Packages
-   kubeadm | 1.30.13-1.1 | https://pkgs.k8s.io/core:/stable:/v1.30/deb  Packages
-   kubeadm | 1.30.12-1.1 | https://pkgs.k8s.io/core:/stable:/v1.30/deb  Packages
-   kubeadm | 1.30.11-1.1 | https://pkgs.k8s.io/core:/stable:/v1.30/deb  Packages
-   kubeadm | 1.30.10-1.1 | https://pkgs.k8s.io/core:/stable:/v1.30/deb  Packages
-   kubeadm | 1.30.9-1.1 | https://pkgs.k8s.io/core:/stable:/v1.30/deb  Packages
-   kubeadm | 1.30.8-1.1 | https://pkgs.k8s.io/core:/stable:/v1.30/deb  Packages
-   kubeadm | 1.30.7-1.1 | https://pkgs.k8s.io/core:/stable:/v1.30/deb  Packages
-   kubeadm | 1.30.6-1.1 | https://pkgs.k8s.io/core:/stable:/v1.30/deb  Packages
-   kubeadm | 1.30.5-1.1 | https://pkgs.k8s.io/core:/stable:/v1.30/deb  Packages
-   kubeadm | 1.30.4-1.1 | https://pkgs.k8s.io/core:/stable:/v1.30/deb  Packages
-   kubeadm | 1.30.3-1.1 | https://pkgs.k8s.io/core:/stable:/v1.30/deb  Packages
-   kubeadm | 1.30.2-1.1 | https://pkgs.k8s.io/core:/stable:/v1.30/deb  Packages
-   kubeadm | 1.30.1-1.1 | https://pkgs.k8s.io/core:/stable:/v1.30/deb  Packages
-   kubeadm | 1.30.0-1.1 | https://pkgs.k8s.io/core:/stable:/v1.30/deb  Packages
-   kubeadm | 1.29.15-1.1 | https://pkgs.k8s.io/core:/stable:/v1.29/deb  Packages
-   kubeadm | 1.29.14-1.1 | https://pkgs.k8s.io/core:/stable:/v1.29/deb  Packages
-   kubeadm | 1.29.13-1.1 | https://pkgs.k8s.io/core:/stable:/v1.29/deb  Packages
-   kubeadm | 1.29.12-1.1 | https://pkgs.k8s.io/core:/stable:/v1.29/deb  Packages
-   kubeadm | 1.29.11-1.1 | https://pkgs.k8s.io/core:/stable:/v1.29/deb  Packages
-   kubeadm | 1.29.10-1.1 | https://pkgs.k8s.io/core:/stable:/v1.29/deb  Packages
-   kubeadm | 1.29.9-1.1 | https://pkgs.k8s.io/core:/stable:/v1.29/deb  Packages
-   kubeadm | 1.29.8-1.1 | https://pkgs.k8s.io/core:/stable:/v1.29/deb  Packages
-   kubeadm | 1.29.7-1.1 | https://pkgs.k8s.io/core:/stable:/v1.29/deb  Packages
-   kubeadm | 1.29.6-1.1 | https://pkgs.k8s.io/core:/stable:/v1.29/deb  Packages
-   kubeadm | 1.29.5-1.1 | https://pkgs.k8s.io/core:/stable:/v1.29/deb  Packages
-   kubeadm | 1.29.4-2.1 | https://pkgs.k8s.io/core:/stable:/v1.29/deb  Packages
-   kubeadm | 1.29.3-1.1 | https://pkgs.k8s.io/core:/stable:/v1.29/deb  Packages
-   kubeadm | 1.29.2-1.1 | https://pkgs.k8s.io/core:/stable:/v1.29/deb  Packages
-   kubeadm | 1.29.1-1.1 | https://pkgs.k8s.io/core:/stable:/v1.29/deb  Packages
-   kubeadm | 1.29.0-1.1 | https://pkgs.k8s.io/core:/stable:/v1.29/deb  Packages
-   kubeadm | 1.28.15-1.1 | https://pkgs.k8s.io/core:/stable:/v1.28/deb  Packages
-   kubeadm | 1.28.14-2.1 | https://pkgs.k8s.io/core:/stable:/v1.28/deb  Packages
-   kubeadm | 1.28.13-1.1 | https://pkgs.k8s.io/core:/stable:/v1.28/deb  Packages
-   kubeadm | 1.28.12-1.1 | https://pkgs.k8s.io/core:/stable:/v1.28/deb  Packages
-   kubeadm | 1.28.11-1.1 | https://pkgs.k8s.io/core:/stable:/v1.28/deb  Packages
-   kubeadm | 1.28.10-1.1 | https://pkgs.k8s.io/core:/stable:/v1.28/deb  Packages
-   kubeadm | 1.28.9-2.1 | https://pkgs.k8s.io/core:/stable:/v1.28/deb  Packages
-   kubeadm | 1.28.8-1.1 | https://pkgs.k8s.io/core:/stable:/v1.28/deb  Packages
-   kubeadm | 1.28.7-1.1 | https://pkgs.k8s.io/core:/stable:/v1.28/deb  Packages
-   kubeadm | 1.28.6-1.1 | https://pkgs.k8s.io/core:/stable:/v1.28/deb  Packages
-   kubeadm | 1.28.5-1.1 | https://pkgs.k8s.io/core:/stable:/v1.28/deb  Packages
-   kubeadm | 1.28.4-1.1 | https://pkgs.k8s.io/core:/stable:/v1.28/deb  Packages
-   kubeadm | 1.28.3-1.1 | https://pkgs.k8s.io/core:/stable:/v1.28/deb  Packages
-   kubeadm | 1.28.2-1.1 | https://pkgs.k8s.io/core:/stable:/v1.28/deb  Packages
-   kubeadm | 1.28.1-1.1 | https://pkgs.k8s.io/core:/stable:/v1.28/deb  Packages
-   kubeadm | 1.28.0-1.1 | https://pkgs.k8s.io/core:/stable:/v1.28/deb  Packages
-   kubeadm | 1.27.16-1.1 | https://pkgs.k8s.io/core:/stable:/v1.27/deb  Packages
-   kubeadm | 1.27.15-1.1 | https://pkgs.k8s.io/core:/stable:/v1.27/deb  Packages
-   kubeadm | 1.27.14-1.1 | https://pkgs.k8s.io/core:/stable:/v1.27/deb  Packages
-   kubeadm | 1.27.13-2.1 | https://pkgs.k8s.io/core:/stable:/v1.27/deb  Packages
-   kubeadm | 1.27.12-1.1 | https://pkgs.k8s.io/core:/stable:/v1.27/deb  Packages
-   kubeadm | 1.27.11-1.1 | https://pkgs.k8s.io/core:/stable:/v1.27/deb  Packages
-   kubeadm | 1.27.10-1.1 | https://pkgs.k8s.io/core:/stable:/v1.27/deb  Packages
-   kubeadm | 1.27.9-1.1 | https://pkgs.k8s.io/core:/stable:/v1.27/deb  Packages
-   kubeadm | 1.27.8-1.1 | https://pkgs.k8s.io/core:/stable:/v1.27/deb  Packages
-   kubeadm | 1.27.7-1.1 | https://pkgs.k8s.io/core:/stable:/v1.27/deb  Packages
-   kubeadm | 1.27.6-1.1 | https://pkgs.k8s.io/core:/stable:/v1.27/deb  Packages
-   kubeadm | 1.27.5-1.1 | https://pkgs.k8s.io/core:/stable:/v1.27/deb  Packages
-   kubeadm | 1.27.4-1.1 | https://pkgs.k8s.io/core:/stable:/v1.27/deb  Packages
-   kubeadm | 1.27.3-1.1 | https://pkgs.k8s.io/core:/stable:/v1.27/deb  Packages
-   kubeadm | 1.27.2-1.1 | https://pkgs.k8s.io/core:/stable:/v1.27/deb  Packages
-   kubeadm | 1.27.1-1.1 | https://pkgs.k8s.io/core:/stable:/v1.27/deb  Packages
-   kubeadm | 1.27.0-2.1 | https://pkgs.k8s.io/core:/stable:/v1.27/deb  Packages
-   kubeadm | 1.26.15-1.1 | https://pkgs.k8s.io/core:/stable:/v1.26/deb  Packages
-   kubeadm | 1.26.14-1.1 | https://pkgs.k8s.io/core:/stable:/v1.26/deb  Packages
-   kubeadm | 1.26.13-1.1 | https://pkgs.k8s.io/core:/stable:/v1.26/deb  Packages
-   kubeadm | 1.26.12-1.1 | https://pkgs.k8s.io/core:/stable:/v1.26/deb  Packages
-   kubeadm | 1.26.11-1.1 | https://pkgs.k8s.io/core:/stable:/v1.26/deb  Packages
-   kubeadm | 1.26.10-1.1 | https://pkgs.k8s.io/core:/stable:/v1.26/deb  Packages
-   kubeadm | 1.26.9-1.1 | https://pkgs.k8s.io/core:/stable:/v1.26/deb  Packages
-   kubeadm | 1.26.8-1.1 | https://pkgs.k8s.io/core:/stable:/v1.26/deb  Packages
-   kubeadm | 1.26.7-1.1 | https://pkgs.k8s.io/core:/stable:/v1.26/deb  Packages
-   kubeadm | 1.26.6-1.1 | https://pkgs.k8s.io/core:/stable:/v1.26/deb  Packages
-   kubeadm | 1.26.5-1.1 | https://pkgs.k8s.io/core:/stable:/v1.26/deb  Packages
-   kubeadm | 1.26.4-1.1 | https://pkgs.k8s.io/core:/stable:/v1.26/deb  Packages
-   kubeadm | 1.26.3-1.1 | https://pkgs.k8s.io/core:/stable:/v1.26/deb  Packages
-   kubeadm | 1.26.2-1.1 | https://pkgs.k8s.io/core:/stable:/v1.26/deb  Packages
-   kubeadm | 1.26.1-1.1 | https://pkgs.k8s.io/core:/stable:/v1.26/deb  Packages
-   kubeadm | 1.26.0-2.1 | https://pkgs.k8s.io/core:/stable:/v1.26/deb  Packages
-   kubeadm | 1.25.16-1.1 | https://pkgs.k8s.io/core:/stable:/v1.25/deb  Packages
-   kubeadm | 1.25.15-1.1 | https://pkgs.k8s.io/core:/stable:/v1.25/deb  Packages
-   kubeadm | 1.25.14-1.1 | https://pkgs.k8s.io/core:/stable:/v1.25/deb  Packages
-   kubeadm | 1.25.13-1.1 | https://pkgs.k8s.io/core:/stable:/v1.25/deb  Packages
-   kubeadm | 1.25.12-1.1 | https://pkgs.k8s.io/core:/stable:/v1.25/deb  Packages
-   kubeadm | 1.25.11-1.1 | https://pkgs.k8s.io/core:/stable:/v1.25/deb  Packages
-   kubeadm | 1.25.10-1.1 | https://pkgs.k8s.io/core:/stable:/v1.25/deb  Packages
-   kubeadm | 1.25.9-1.1 | https://pkgs.k8s.io/core:/stable:/v1.25/deb  Packages
-   kubeadm | 1.25.8-1.1 | https://pkgs.k8s.io/core:/stable:/v1.25/deb  Packages
-   kubeadm | 1.25.7-1.1 | https://pkgs.k8s.io/core:/stable:/v1.25/deb  Packages
-   kubeadm | 1.25.6-1.1 | https://pkgs.k8s.io/core:/stable:/v1.25/deb  Packages
-   kubeadm | 1.25.5-1.1 | https://pkgs.k8s.io/core:/stable:/v1.25/deb  Packages
-   kubeadm | 1.25.4-1.1 | https://pkgs.k8s.io/core:/stable:/v1.25/deb  Packages
-   kubeadm | 1.25.3-1.1 | https://pkgs.k8s.io/core:/stable:/v1.25/deb  Packages
-   kubeadm | 1.25.2-1.1 | https://pkgs.k8s.io/core:/stable:/v1.25/deb  Packages
-   kubeadm | 1.25.1-1.1 | https://pkgs.k8s.io/core:/stable:/v1.25/deb  Packages
-   kubeadm | 1.25.0-2.1 | https://pkgs.k8s.io/core:/stable:/v1.25/deb  Packages
+cp -r files/ansible /etc/
 ```
-yum版本
+
+### 4. 配置 SSH 免密
+
+从 master1 的 root 用户免密访问所有节点（含自身）。
+
+### 5. 执行安装
+
 ```bash
-[root@master1 yum.repos.d]# yum --showduplicates list kubeadm
-Available Packages
-kubeadm.x86_64                           1.25.0-150500.2.1                            kubernetes1.25
-kubeadm.x86_64                           1.25.1-150500.1.1                            kubernetes1.25
-kubeadm.x86_64                           1.25.2-150500.1.1                            kubernetes1.25
-kubeadm.x86_64                           1.25.3-150500.1.1                            kubernetes1.25
-kubeadm.x86_64                           1.25.4-150500.1.1                            kubernetes1.25
-kubeadm.x86_64                           1.25.5-150500.1.1                            kubernetes1.25
-kubeadm.x86_64                           1.25.6-150500.1.1                            kubernetes1.25
-kubeadm.x86_64                           1.25.7-150500.1.1                            kubernetes1.25
-kubeadm.x86_64                           1.25.8-150500.1.1                            kubernetes1.25
-kubeadm.x86_64                           1.25.9-150500.1.1                            kubernetes1.25
-kubeadm.x86_64                           1.25.10-150500.1.1                           kubernetes1.25
-kubeadm.x86_64                           1.25.11-150500.1.1                           kubernetes1.25
-kubeadm.x86_64                           1.25.12-150500.1.1                           kubernetes1.25
-kubeadm.x86_64                           1.25.13-150500.1.1                           kubernetes1.25
-kubeadm.x86_64                           1.25.14-150500.1.1                           kubernetes1.25
-kubeadm.x86_64                           1.25.15-150500.1.1                           kubernetes1.25
-kubeadm.x86_64                           1.25.16-150500.1.1                           kubernetes1.25
-kubeadm.x86_64                           1.26.0-150500.2.1                            kubernetes1.26
-kubeadm.x86_64                           1.26.1-150500.1.1                            kubernetes1.26
-kubeadm.x86_64                           1.26.2-150500.1.1                            kubernetes1.26
-kubeadm.x86_64                           1.26.3-150500.1.1                            kubernetes1.26
-kubeadm.x86_64                           1.26.4-150500.1.1                            kubernetes1.26
-kubeadm.x86_64                           1.26.5-150500.1.1                            kubernetes1.26
-kubeadm.x86_64                           1.26.6-150500.1.1                            kubernetes1.26
-kubeadm.x86_64                           1.26.7-150500.1.1                            kubernetes1.26
-kubeadm.x86_64                           1.26.8-150500.1.1                            kubernetes1.26
-kubeadm.x86_64                           1.26.9-150500.1.1                            kubernetes1.26
-kubeadm.x86_64                           1.26.10-150500.1.1                           kubernetes1.26
-kubeadm.x86_64                           1.26.11-150500.1.1                           kubernetes1.26
-kubeadm.x86_64                           1.26.12-150500.1.1                           kubernetes1.26
-kubeadm.x86_64                           1.26.13-150500.1.1                           kubernetes1.26
-kubeadm.x86_64                           1.27.0-150500.2.1                            kubernetes1.27
-kubeadm.x86_64                           1.27.1-150500.1.1                            kubernetes1.27
-kubeadm.x86_64                           1.27.2-150500.1.1                            kubernetes1.27
-kubeadm.x86_64                           1.27.3-150500.1.1                            kubernetes1.27
-kubeadm.x86_64                           1.27.4-150500.1.1                            kubernetes1.27
-kubeadm.x86_64                           1.27.5-150500.1.1                            kubernetes1.27
-kubeadm.x86_64                           1.27.6-150500.1.1                            kubernetes1.27
-kubeadm.x86_64                           1.27.7-150500.1.1                            kubernetes1.27
-kubeadm.x86_64                           1.27.8-150500.1.1                            kubernetes1.27
-kubeadm.x86_64                           1.27.9-150500.1.1                            kubernetes1.27
-kubeadm.x86_64                           1.27.10-150500.1.1                           kubernetes1.27
-kubeadm.x86_64                           1.28.0-150500.1.1                            kubernetes1.28
-kubeadm.x86_64                           1.28.1-150500.1.1                            kubernetes1.28
-kubeadm.x86_64                           1.28.2-150500.1.1                            kubernetes1.28
-kubeadm.x86_64                           1.28.3-150500.1.1                            kubernetes1.28
-kubeadm.x86_64                           1.28.4-150500.1.1                            kubernetes1.28      已测试通过
-kubeadm.x86_64                           1.28.5-150500.1.1                            kubernetes1.28
-kubeadm.x86_64                           1.28.6-150500.1.1                            kubernetes1.28
-kubeadm.x86_64                           1.29.0-150500.1.1                            kubernetes1.29
-kubeadm.x86_64                           1.29.1-150500.1.1                            kubernetes1.29
+ansible-playbook playbooks/main.yaml
+# 第一次包含重启，重启完成后再次执行同一命令
 ```
+
+等待几分钟，集群就绪：
+
+```bash
+kubectl get nodes
+```
+
+**CentOS 用户**: 使用 `playbooks/main_redhat_release.yaml`，详见 [How_to_run_redhat_release.md](How_to_run_redhat_release.md)
+
+---
+
+## 项目结构
+
+```
+k8s_kubeadm_install/
+├── README.md                         # 项目说明（本文件）
+├── How_to_run.md                     # Ubuntu 详细安装指南
+├── How_to_run_redhat_release.md      # CentOS 详细安装指南
+│
+├── playbooks/                        # Ansible Playbook
+│   ├── main.yaml                     # 【核心】Ubuntu 默认安装入口
+│   ├── main_redhat_release.yaml      # 【核心】CentOS 安装入口
+│   ├── main-ubuntu2204-ha.yaml       # Ubuntu 22.04 高可用方案
+│   ├── main-ubuntu2404-ha.yaml       # Ubuntu 24.04 高可用方案
+│   ├── metrics_server_install.yaml   # 选装：metrics-server
+│   ├── prometheus_install.yaml       # 选装：Prometheus + Grafana
+│   └── harbor_install.yaml           # 选装：Harbor 私有仓库
+│
+├── files/                            # 资源文件
+│   ├── vars.yaml                     # 【核心】全局变量配置
+│   ├── ansible/                      # Ansible 配置
+│   │   ├── ansible.cfg               #   remote_user=root 等配置
+│   │   └── hosts                     #   Inventory 主机清单
+│   ├── calico/                       #   Calico 网络插件
+│   ├── ingress/                      #   Ingress-Nginx Controller
+│   ├── metrics/                      #   Metrics Server
+│   ├── prometheus/                   #   Prometheus 监控栈
+│   ├── harbor/                       #   Harbor 私有仓库
+│   ├── ha/                           #   高可用（OpenResty 负载均衡）
+│   ├── k8s_pkgs/                     #   K8s APT/YUM 源和 GPG 密钥
+│   ├── docker-images/                #   离线镜像包
+│   ├── nfs_volume/                   #   NFS 持久卷示例
+│   ├── kube-cert/                    #   证书续期脚本
+│   └── helm/                         #   Helm 二进制和 JumpServer Chart
+```
+
+**设计说明**: 本项目不使用 Ansible roles，所有任务直接写在 playbook 中，通过 `vars_files` 引入变量，通过 lock 文件实现幂等，结构扁平、易于理解和修改。
+
+---
+
+## 支持的组件
+
+| 组件 | 内置版本范围 | 选装方式 | 说明 |
+|---|---|---|---|
+| **Calico** | v3.26.3 ~ v3.32.1 | 随集群自动安装 | 网络插件，通过 Tigera Operator 部署 |
+| **Ingress-Nginx** | v1.9.4 ~ v1.15.1 | 随集群自动安装 | DaemonSet + hostNetwork 模式 |
+| **Metrics Server** | v0.6.4 ~ v0.8.1 | `-t metrics` | 资源监控，`kubectl top` 命令依赖 |
+| **Prometheus + Grafana** | 0.13.0 / 0.15.0 / 0.18.0 | `-t prometheus` | 监控报警，Grafana Ingress 暴露 |
+| **Harbor** | 离线安装包 | `-t harbor` | 私有镜像仓库，支持 password/secret 认证 |
+
+### 添加新版本
+
+以 Calico 为例，将 `tigera-operator.yaml` 和 `custom-resources.yaml` 下载后按 `文件名_版本号.yaml` 格式放入 `files/calico/`，再在 `vars.yaml` 中修改 `calico_version` 即可。
+
+其它组件同理，详见 `How_to_run.md` 中各组件下载说明。
+
+---
+
+## 版本兼容性
+
+### K8s 与系统兼容矩阵
+
+| K8s 版本 | Ubuntu 20.04 | Ubuntu 22.04 | Ubuntu 24.04 | CentOS 7.9 |
+|---|---|---|---|---|
+| v1.25 ~ v1.27 | :white_check_mark: | :white_check_mark: | - | :white_check_mark: |
+| v1.28 ~ v1.30 | :white_check_mark: | :white_check_mark: | - | :white_check_mark: |
+| v1.31 ~ v1.33 | :white_check_mark: | :white_check_mark: | :white_check_mark: | - |
+| v1.34 ~ v1.36 | :white_check_mark: | :white_check_mark: | :white_check_mark: | - |
+
+### 关键组件版本对应
+
+| K8s | Calico | Ingress | Metrics Server | Prometheus Stack |
+|---|---|---|---|---|
+| v1.28 | v3.26.3+ | v1.9.4+ | v0.6.4+ | 0.13.0 |
+| v1.29 | v3.28.0+ | v1.10.1+ | v0.7.0+ | 0.15.0 |
+| v1.30+ | v3.28.0+ | v1.11.1+ | v0.7.0+ | 0.15.0+ |
+| v1.32+ | v3.29.0+ | v1.12.1+ | v0.8.0+ | 0.18.0 |
+
+> 组件版本间有依赖关系，具体请参考各组件官方兼容性文档。更换版本前建议先在测试环境验证。
+
+---
+
+## 组件资源
+
+更新组件版本时，参考以下官方文档和下载地址：
+
+| 组件 | 官方文档 / 版本兼容 | YAML 下载 |
+|---|---|---|
+| **Calico** | [版本要求](https://docs.tigera.io/calico/latest/getting-started/kubernetes/requirements) · [快速部署](https://docs.tigera.io/calico/latest/getting-started/kubernetes/quickstart) | `tigera-operator` / `custom-resources` [raw](https://raw.githubusercontent.com/projectcalico/calico) |
+| **Ingress-Nginx** | [版本支持](https://github.com/kubernetes/ingress-nginx#readme) · [快速部署](https://kubernetes.github.io/ingress-nginx/deploy/) · [Releases](https://github.com/kubernetes/ingress-nginx/releases) | `deploy.yaml` [raw](https://raw.githubusercontent.com/kubernetes/ingress-nginx) |
+| **Metrics Server** | [兼容矩阵](https://github.com/kubernetes-sigs/metrics-server#compatibility-matrix) · [Releases](https://github.com/kubernetes-sigs/metrics-server/releases) | `components.yaml` |
+| **kube-prometheus** | [仓库](https://github.com/prometheus-operator/kube-prometheus) · [Releases](https://github.com/prometheus-operator/kube-prometheus/releases) | 解压 release 包，保留 `manifests/` 目录 |
+| **Harbor** | [Releases](https://github.com/goharbor/harbor/releases) | 离线安装包 `harbor-offline-installer-*.tgz` |
+| **Docker Compose** | [Releases](https://github.com/docker/compose/releases) | `docker-compose-linux-x86_64`（Harbor 依赖） |
+
+### kube-prometheus 版本兼容表
+
+| Stack 版本 | K8s 1.22 | 1.23 | 1.24 | 1.25 | 1.26 | 1.27 | 1.28 |
+|---|---|---|---|---|---|---|---|
+| [release-0.10](https://github.com/prometheus-operator/kube-prometheus/tree/release-0.10) | ✔ | ✔ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| [release-0.11](https://github.com/prometheus-operator/kube-prometheus/tree/release-0.11) | ✗ | ✔ | ✔ | ✗ | ✗ | ✗ | ✗ |
+| [release-0.12](https://github.com/prometheus-operator/kube-prometheus/tree/release-0.12) | ✗ | ✗ | ✔ | ✔ | ✗ | ✗ | ✗ |
+| [release-0.13](https://github.com/prometheus-operator/kube-prometheus/tree/release-0.13) | ✗ | ✗ | ✗ | ✗ | ✔ | ✔ | ✔ |
+| [release-0.14](https://github.com/prometheus-operator/kube-prometheus/tree/release-0.14) | ✗ | ✗ | ✔ | ✔ | ✔ | ✗ | ✗ |
+| [release-0.15](https://github.com/prometheus-operator/kube-prometheus/tree/release-0.15) | ✗ | ✗ | ✗ | ✗ | ✔ | ✔ | ✔ |
+| [release-0.18](https://github.com/prometheus-operator/kube-prometheus/tree/release-0.18) | ✗ | ✗ | ✗ | ✗ | ✗ | ✔ | ✔ |
+
+> **注意**: 0.11 版本后加入了 NetworkPolicies，使用 NodePort 访问需删除 `grafana-networkPolicy.yaml`。本项目默认使用 Ingress 方式暴露，无需额外处理。
+>
+> Prometheus 镜像替换参考：不同版本需修改 `manifests/prometheusAdapter-deployment.yaml` 和 `manifests/kubeStateMetrics-deployment.yaml` 中的镜像地址。详见各版本 `files/prometheus/kube-prometheus-*/manifests/` 中的实际配置。
+
+---
+
+## 文档索引
+
+| 文档 | 内容 |
+|---|---|
+| [How_to_run.md](How_to_run.md) | Ubuntu 系统完整安装指南（推荐从这里开始） |
+| [How_to_run_redhat_release.md](How_to_run_redhat_release.md) | CentOS / RHEL 系统安装指南 |
+| [files/ha/README.md](files/ha/README.md) | 高可用集群部署说明（多 master + OpenResty） |
+| [files/docker-images/README.md](files/docker-images/README.md) | 离线镜像包获取方式 |
+
+> 本文档与项目一同持续更新。当前默认配置基于 **K8s v1.36.0 + Calico v3.32.1**。

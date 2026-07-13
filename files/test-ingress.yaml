@@ -3,7 +3,7 @@ kind: StatefulSet
 metadata:
   name: nginx-statefulset
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: nginx
@@ -14,9 +14,11 @@ spec:
     spec:
       containers:
         - name: nginx
-          image: nginx
+          image: harbor.xmtss.local:16443/baseimg/nginx:latest
           ports:
             - containerPort: 80
+      imagePullSecrets:
+        - name: harbor-xmtss
 
 ---
 apiVersion: v1

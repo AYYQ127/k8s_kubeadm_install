@@ -296,11 +296,11 @@
 
     - name: 配置containerd访问harbor
       block:
-        - name: 复制containred配置文件到所有主机
-          template:
-            src: ../files/harbor/with_{{ passord_or_secert }}_config.toml.j2
-            dest: /etc/containerd/config.toml
-            backup: yes
+        # - name: 复制containred配置文件到所有主机
+        #   template:
+        #     src: ../files/harbor/with_{{ passord_or_secert }}_config.toml.j2
+        #     dest: /etc/containerd/config.toml
+        #     backup: yes
           
         - name: 重启containerd
           service:

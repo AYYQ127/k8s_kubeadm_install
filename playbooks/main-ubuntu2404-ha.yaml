@@ -46,52 +46,21 @@
           timezone:
             name: Asia/Shanghai
         
-        - name: 3.6:安装指定版本 containerd 1.7.28 并锁定,如果报错执行apt-cache madison containerd查看对应版本
+        - name: 3.6:ubuntu24 + k8s v1.35默认安装containerd v2版本，安装完进行锁定
           apt:
-            name: containerd=1.7.28-0ubuntu1~24.04.2
+            name: containerd
             state: present
             force_apt_get: yes
         - name: 锁定 containerd 防止自动升级  
           shell: apt-mark hold containerd
 
-        - name: 3.7:安装docker.io
-          apt:
-            name: docker.io
-            state: present
-        - name: 3.8:配置/etc/docker/daemon.json
-          copy:
-            content: |
-              { 
-                "data-root": "/data2/docker", 
-                "exec-opts": ["native.cgroupdriver=systemd"], 
-                "registry-mirrors": [
-                  "https://docker.m.daocloud.io"
-                ],
-                "insecure-registries": ["{{ harbor_domain }}"],
-                "max-concurrent-downloads": 10,
-                "live-restore": true,
-                "log-driver": "json-file",
-                "log-level": "warn",
-                "log-opts": {
-                  "max-size": "50m",
-                  "max-file": "1"
-                  },
-                "storage-driver": "overlay2"
-              }
-            dest: /etc/docker/daemon.json
-
-        - name: 3.9:重启docker
-          service:
-            name: docker
-            state: restarted
- 
-        - name: 3.10.安装 ipset ipvsadm
+        - name: 3.7.安装 ipset ipvsadm
           apt:
             pkg:
             - ipset
             - ipvsadm
           
-        - name: 3.11:k8s系统调优
+        - name: 3.8:k8s系统调优
           copy:
             content: |
               #允许IPv6转发请求通过iptables进行处理(如果禁用防火墙或不是iptables,则该配置无效)
@@ -119,7 +88,7 @@
               vm.swappiness = 0
             dest: /etc/sysctl.d/k8s.conf
     
-        - name: 3.12:加载iptables和ipvs内核模块
+        - name: 3.9:加载iptables和ipvs内核模块
           copy:
             content: |
               # /etc/modules-load.d/kubernetes.conf
@@ -137,12 +106,12 @@
             dest: /etc/modules-load.d/kubernetes.conf
             mode: '0755'
 
-        - name: 3.13:在文件中查找 swap 行
+        - name: 3.10:在文件中查找 swap 行
           shell: grep -E 'swap' /etc/fstab || true
           register: swap_lines
           failed_when: false
 
-        - name: 3.14:注释掉 swap 行
+        - name: 3.11:注释掉 swap 行
           lineinfile:
             path: /etc/fstab
             regexp: '{{ item }}'
@@ -151,7 +120,7 @@
           with_items: "{{ swap_lines.stdout_lines }}"
           when: swap_lines.stdout_lines | length > 0
       always:
-        - name: 3.15关闭 swap 分区
+        - name: 3.12关闭 swap 分区
           command: swapoff -a
       when: not init_file_exists.stat.exists
 
@@ -179,11 +148,38 @@
 
     - name: 2.containerd设置相关
       block:
-        - name: 2.1:创建containerd目录
+        - name: 2.1.1.1:创建containerd目录(创建v2版本配置文件目录1)
           file:
-            path: /etc/containerd
+            path: /etc/containerd/certs.d/registry.k8s.io
             state: directory
             mode: "0755"
+        - name: 2.1.1.2:复制对应镜像仓的hosts.toml
+          copy:
+            src: ../files/containerd/certs.d/registry.k8s.io.toml
+            dest: /etc/containerd/certs.d/registry.k8s.io/hosts.toml
+            mode: '0644'
+
+        - name: 2.1.2.1:创建containerd目录(创建v2版本配置文件目录2)
+          file:
+            path: /etc/containerd/certs.d/docker.io
+            state: directory
+            mode: "0755"
+        - name: 2.1.2.2:复制对应镜像仓的hosts.toml
+          copy:
+            src: ../files/containerd/certs.d/docker.io.toml
+            dest: /etc/containerd/certs.d/docker.io/hosts.toml
+            mode: '0644'
+
+        - name: 2.1.3.1:创建containerd目录(创建v2版本配置文件目录3)
+          file:
+            path: /etc/containerd/certs.d/{{ harbor_domain }}_{{ harbor_port }}_
+            state: directory
+            mode: "0755"
+        - name: 2.1.3.2:复制对应镜像仓的hosts.toml
+          template:
+            src: ../files/containerd/certs.d/harbor.toml.j2
+            dest: /etc/containerd/certs.d/{{ harbor_domain }}_{{ harbor_port }}_/hosts.toml
+            mode: '0644'
 
         - name: 2.2:生成containerd配置
           shell: containerd config default > /etc/containerd/config.toml
@@ -191,8 +187,8 @@
         - name: 2.3:修改配置文件中使用的沙箱镜像版本,修改成阿里源的{{sandbox_image}}
           lineinfile:
             path: /etc/containerd/config.toml
-            regexp: sandbox_image
-            line: '    sandbox_image = "registry.aliyuncs.com/google_containers/{{sandbox_image}}"'
+            regexp: 'sandbox ='
+            line: '      sandbox = "registry.aliyuncs.com/google_containers/{{sandbox_image}}"'
             backup: yes
         - name: 2.4:设置容器运行时(containerd + CRI)在创建容器时使用 Systemd Cgroups 驱动
           lineinfile:
@@ -200,14 +196,13 @@
             regexp: SystemdCgroup
             line: '            SystemdCgroup = true'
             backup: yes
-            
-        - name: Ensure docker.io mirror block exists under registry.mirrors
-          blockinfile:
+        - name: 2.5:修改containerd registry config_path
+          replace:
             path: /etc/containerd/config.toml
-            insertafter: '^\s*\[plugins\."io.containerd.grpc.v1.cri"\.registry\.mirrors\]'
-            block: |
-                  [plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
-                    endpoint = ["https://docker.m.daocloud.io"]
+            regexp: "config_path = '/etc/containerd/certs.d:/etc/docker/certs.d'"
+            replace: "config_path = '/etc/containerd/certs.d'"
+            backup: yes
+            
         
         - name: 2.5:解决crictl ps 报错
           copy:
@@ -286,7 +281,7 @@
           delegate_to: "{{ item }}"
           loop: "{{ groups['manage_node'] }}"
         
-        - name: 3.11:请确认你安装的版本号为v1.28.4,v1.29.6,v1.30.2其中之一,若不是,请自行解决镜像问题,请设置https://docker.m.daocloud.io
+        - name: 3.11:离线安装，请自行解决镜像问题,请设置https://docker.m.daocloud.io
           pause:
             seconds: 15 
         - name: 3.11.1:导入{{kubernetes_version}}镜像第一步,复制脚本
@@ -593,15 +588,21 @@
             msg: |
               https://docs.tigera.io/calico/latest/getting-started/kubernetes/quickstart
 
-        - name: 4.3:快速部署yaml
-          shell: kubectl apply -f ../files/calico/tigera-operator_{{calico_version}}.yaml 
-          args:
-            creates: /root/k8s_install/calico_operator.lock
-          register: calico_operator
+        - name: 创建crd
+          shell: kubectl create -f ../files/calico/v1_crd_projectcalico_org_{{calico_version}}.yaml 
 
-        - name: 等待 Calico CRDs 创建完成
-          shell: |
-            kubectl wait --for=condition=Established crd/installations.operator.tigera.io --timeout=180s
+        - name: 等待 projectcalico CRD 就绪
+          shell: kubectl wait --for=condition=Established crd/ippools.crd.projectcalico.org --timeout=120s
+          retries: 5
+          delay: 5
+          register: wait_projectcalico_crds
+          until: wait_projectcalico_crds.rc == 0
+
+        - name: 快速部署operator
+          shell: kubectl create -f ../files/calico/tigera-operator_{{calico_version}}.yaml         
+
+        - name: 等待 operator CRD 就绪
+          shell: kubectl wait --for=condition=Established crd/installations.operator.tigera.io --timeout=180s
           retries: 5
           delay: 10
           register: wait_crds
@@ -611,13 +612,12 @@
           lineinfile:
             path: ../files/calico/custom-resources_{{calico_version}}.yaml
             regexp: cidr
-            line: '      cidr: {{pod_network}}'
+            line: '        cidr: {{pod_network}}'
             backup: yes
 
         - name: 4.5:创建必要的自定义资源
-          shell: kubectl apply -f ../files/calico/custom-resources_{{calico_version}}.yaml --validate=false
-          when: calico_operator is succeeded
-
+          shell: kubectl create -f ../files/calico/custom-resources_{{calico_version}}.yaml
+          
         - name: 创建安装calico.lock文件
           file: 
             path: /root/k8s_install/calico.lock
@@ -687,26 +687,14 @@
     - metrics
     - never
 
-- name: 第六步[选装] 安装cert_manager
-  import_playbook: ./cert_manager_install.yaml
-  tags:
-    - cert_manager
-    - never
 
-
-- name: 第七步[选装] dashboard
-  import_playbook: ./dashboard_install.yaml
-  tags:
-    - dashboard
-    - never
-
-- name: 第八步[选装] prometheus
+- name: 第六步[选装] prometheus
   import_playbook: ./prometheus_install.yaml
   tags:
     - prometheus
     - never
 
-- name: 第九步[选装] harbor
+- name: 第七步[选装] harbor
   import_playbook: ./harbor_install.yaml
   tags:
     - harbor
